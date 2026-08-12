@@ -301,6 +301,17 @@ export function registerSocketHandlers(
       }
     })
 
+    socket.on(CLIENT_EVENTS.adminEndPhase, async (_payload, ack?: (res: Ack) => void) => {
+      try {
+        requireAdmin(socket)
+        await runtime.mutate((store) => store.endPhase())
+        broadcast()
+        ack?.(ok())
+      } catch (error) {
+        ack?.(fail(error))
+      }
+    })
+
     socket.on(CLIENT_EVENTS.adminNewGame, async (_payload, ack?: (res: Ack) => void) => {
       try {
         requireAdmin(socket)

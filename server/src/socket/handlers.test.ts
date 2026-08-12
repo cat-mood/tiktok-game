@@ -279,6 +279,23 @@ describe('socket spawn in dev', () => {
     const extra = await state.wait((s) => s.players.length === 5)
     assert.equal(extra.players.filter((p) => p.departmentId === 'qa').length, 2)
   })
+
+  it('lets admin end the current phase', async () => {
+    const client = ioc(url, { transports: ['websocket'] })
+    const state = trackState(client)
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminStartGame)).ok, true)
+    await state.wait((s) => s.phase === 'PLANNING')
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndPhase)).ok, true)
+    const work = await state.wait((s) => s.phase === 'WORK')
+    assert.equal(work.currentSprint, 1)
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndPhase)).ok, true)
+    const next = await state.wait((s) => s.phase === 'PLANNING' && s.currentSprint === 2)
+    assert.equal(next.currentSprint, 2)
+  })
 })
 
 describe('socket sprint flow', () => {

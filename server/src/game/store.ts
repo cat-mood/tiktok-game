@@ -303,6 +303,13 @@ export class GameStore {
     throw new GameError('Нельзя сменить фазу')
   }
 
+  endPhase(): void {
+    if (this.state.phase !== 'PLANNING' && this.state.phase !== 'WORK') {
+      throw new GameError('Сейчас нет активного этапа')
+    }
+    this.advancePhase(this.now())
+  }
+
   reset(): void {
     this.state = createEmptyState()
   }

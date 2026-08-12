@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   CLIENT_EVENTS,
   DEPARTMENTS,
+  TOTAL_SPRINTS,
   type ClientGameState,
   type DepartmentId,
   type Player,
@@ -17,8 +18,11 @@ type Props = {
 
 export function AdminScreen({ state, onError }: Props) {
   const [confirmNew, setConfirmNew] = useState(false)
+  const [confirmEndPhase, setConfirmEndPhase] = useState(false)
   const [busy, setBusy] = useState(false)
   const locked = state.phase !== 'LOBBY'
+  const canEndPhase = state.phase === 'PLANNING' || state.phase === 'WORK'
+  const endPhase = endPhaseCopy(state)
 
   const run = async (event: string, payload?: unknown) => {
     setBusy(true)
@@ -47,6 +51,16 @@ export function AdminScreen({ state, onError }: Props) {
           >
             Начать игру
           </button>
+          {canEndPhase && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmEndPhase(true)}
+              className="rounded-2xl bg-gold px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
+            >
+              Завершить этап
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -87,8 +101,28 @@ export function AdminScreen({ state, onError }: Props) {
         <AdminGameHud state={state} />
       )}
 
+      {confirmEndPhase && (
+        <ConfirmModal
+          title={endPhase.title}
+          body={endPhase.body}
+          confirmLabel="Завершить этап"
+          confirmClass="bg-gold text-ink"
+          onCancel={() => setConfirmEndPhase(false)}
+          onConfirm={async () => {
+            const ok = await run(CLIENT_EVENTS.adminEndPhase)
+            if (ok) {
+              setConfirmEndPhase(false)
+            }
+          }}
+        />
+      )}
+
       {confirmNew && (
         <ConfirmModal
+          title="Начать новую игру?"
+          body="Текущая сессия уйдёт в архив, игроки вернутся на экран входа."
+          confirmLabel="Новая игра"
+          confirmClass="bg-mag text-white"
           onCancel={() => setConfirmNew(false)}
           onConfirm={async () => {
             const ok = await run(CLIENT_EVENTS.adminNewGame)
@@ -372,26 +406,32 @@ function AdminPlayerCard({
 }
 
 function ConfirmModal({
+  title,
+  body,
+  confirmLabel,
+  confirmClass,
   onCancel,
   onConfirm,
 }: {
+  title: string
+  body: string
+  confirmLabel: string
+  confirmClass: string
   onCancel: () => void
   onConfirm: () => void
 }) {
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
       <div className="w-full max-w-md rounded-3xl border border-line bg-panel p-6">
-        <h2 className="font-display text-3xl">Начать новую игру?</h2>
-        <p className="mt-3 text-white/70">
-          Текущая сессия уйдёт в архив, игроки вернутся на экран входа.
-        </p>
+        <h2 className="font-display text-3xl">{title}</h2>
+        <p className="mt-3 text-white/70">{body}</p>
         <div className="mt-6 flex gap-3">
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 rounded-2xl bg-mag py-3 font-bold text-white"
+            className={`flex-1 rounded-2xl py-3 font-bold ${confirmClass}`}
           >
-            Новая игра
+            {confirmLabel}
           </button>
           <button
             type="button"
@@ -404,6 +444,25 @@ function ConfirmModal({
       </div>
     </div>
   )
+}
+
+function endPhaseCopy(state: ClientGameState): { title: string; body: string } {
+  if (state.phase === 'PLANNING') {
+    return {
+      title: 'Завершить планирование?',
+      body: 'Сразу начнётся WORK. Игрокам без выбранной сложности будет назначена EASY.',
+    }
+  }
+  if (state.phase === 'WORK' && state.currentSprint < TOTAL_SPRINTS) {
+    return {
+      title: `Завершить спринт ${state.currentSprint}?`,
+      body: `Начнётся планирование спринта ${state.currentSprint + 1}. Незавершённые задачи останутся незавершёнными.`,
+    }
+  }
+  return {
+    title: 'Завершить последний спринт?',
+    body: 'Игра перейдёт в FINISHED. Незавершённые задачи останутся незавершёнными.',
+  }
 }
 
 export function useAdminSession(onError: (message: string) => void) {

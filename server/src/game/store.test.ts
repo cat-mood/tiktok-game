@@ -278,6 +278,18 @@ describe('GameStore sprints', () => {
     assert.equal(state.tasks.length, 12)
   })
 
+  it('lets admin end the current phase immediately', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    assert.throws(() => store.endPhase(), /нет активного этапа/)
+    store.startGame()
+    store.endPhase()
+    assert.equal(store.getState().phase, 'WORK')
+    store.endPhase()
+    assert.equal(store.getState().phase, 'PLANNING')
+    assert.equal(store.getState().currentSprint, 2)
+  })
+
   it('normalizes a legacy RUNNING snapshot into a lobby', () => {
     const store = new GameStore()
     seedFourLeads(store)

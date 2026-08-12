@@ -12,6 +12,7 @@ export const CLIENT_EVENTS = {
   adminMovePlayer: 'admin:movePlayer',
   adminRemovePlayer: 'admin:removePlayer',
   adminStartGame: 'admin:startGame',
+  adminEndPhase: 'admin:endPhase',
   adminNewGame: 'admin:newGame',
   adminDismissRestore: 'admin:dismissRestore',
   adminSpawnPlayer: 'admin:spawnPlayer',
