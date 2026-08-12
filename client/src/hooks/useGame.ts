@@ -14,6 +14,7 @@ const emptyState: ClientGameState = {
   phase: 'LOBBY',
   players: [],
   restoredFromDisk: false,
+  devTools: false,
 }
 
 export function useGame() {

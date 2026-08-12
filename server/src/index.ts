@@ -47,7 +47,9 @@ function lanAddresses(): string[] {
 }
 
 async function main() {
-  const runtime = await GameRuntime.create(DATA_DIR)
+  const runtime = await GameRuntime.create(DATA_DIR, {
+    devTools: process.env.DEV_TOOLS === 'true',
+  })
   const app = express()
   const httpServer = createServer(app)
   const io = new Server(httpServer, {
@@ -78,6 +80,9 @@ async function main() {
     console.log(`Сессия: ${runtime.store.getState().sessionId}`)
     if (runtime.restoredFromDisk) {
       console.log('Состояние восстановлено с диска')
+    }
+    if (runtime.devTools) {
+      console.log('Dev tools: спавн игроков в /admin')
     }
     for (const url of urls) {
       console.log(`Игроки: ${url}`)

@@ -19,6 +19,7 @@ export type GameState = {
 
 export type ClientGameState = GameState & {
   restoredFromDisk: boolean
+  devTools: boolean
 }
 
 export type Identity = {

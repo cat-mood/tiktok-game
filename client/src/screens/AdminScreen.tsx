@@ -54,8 +54,22 @@ export function AdminScreen({ state, onError }: Props) {
           >
             Новая игра
           </button>
+          {state.devTools && (
+            <button
+              type="button"
+              disabled={busy || locked}
+              onClick={() => void run(CLIENT_EVENTS.adminFillLobby)}
+              className="rounded-2xl border border-gold/50 px-5 py-3 text-lg font-bold text-gold"
+            >
+              Заполнить лобби
+            </button>
+          )}
         </div>
       </header>
+
+      {state.devTools && (
+        <p className="mt-4 text-sm uppercase tracking-[0.2em] text-gold/70">Dev: можно спавнить игроков</p>
+      )}
 
       {state.restoredFromDisk && (
         <RestoreBanner
@@ -105,6 +119,18 @@ export function AdminScreen({ state, onError }: Props) {
                     onRemove={() => void run(CLIENT_EVENTS.adminRemovePlayer, { playerId: player.id })}
                   />
                 ))}
+                {state.devTools && (
+                  <button
+                    type="button"
+                    disabled={locked || busy}
+                    onClick={() =>
+                      void run(CLIENT_EVENTS.adminSpawnPlayer, { departmentId: dept.id })
+                    }
+                    className="w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-sm text-white/60 hover:border-cyan/40 hover:text-cyan disabled:opacity-40"
+                  >
+                    + Игрок
+                  </button>
+                )}
               </div>
             </section>
           )

@@ -121,6 +121,7 @@ describe('socket lobby flow', () => {
 
     const auth = await emitAck(admin.client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })
     assert.equal(auth.ok, true)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminFillLobby)).ok, false)
 
     const seen = await admin.state.wait((s) => s.players.length === 2)
     const alexId = seen.players.find((p) => p.name === 'Алекс')!.id
@@ -217,5 +218,61 @@ describe('socket lobby flow', () => {
     const fresh = await admin.state.wait((s) => s.sessionId !== oldSession)
     assert.equal(fresh.players.length, 0)
     assert.equal(fresh.phase, 'LOBBY')
+  })
+})
+
+describe('socket spawn in dev', () => {
+  let dataDir = ''
+  let url = ''
+  let io: Server
+  let httpServer: ReturnType<typeof createServer>
+  let runtime: GameRuntime
+  const clients: ClientSocket[] = []
+
+  before(async () => {
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-spawn-'))
+    runtime = await GameRuntime.create(dataDir, { devTools: true })
+    httpServer = createServer()
+    io = new Server(httpServer, { cors: { origin: true } })
+    registerSocketHandlers(io, runtime, ADMIN_CODE)
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+    const address = httpServer.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('No listen address')
+    }
+    url = `http://127.0.0.1:${address.port}`
+  })
+
+  after(async () => {
+    for (const client of clients) {
+      client.close()
+    }
+    io.close()
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    await runtime.flush()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  it('lets admin fill the lobby and spawn extra players', async () => {
+    const client = ioc(url, { transports: ['websocket'] })
+    const state = trackState(client)
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminFillLobby)).ok, true)
+    const filled = await state.wait((s) => s.players.length === 4)
+    assert.equal(filled.devTools, true)
+    assert.equal(
+      filled.players.filter((p) => p.isTeamLead).length,
+      4,
+    )
+
+    assert.equal(
+      (await emitAck(client, CLIENT_EVENTS.adminSpawnPlayer, { departmentId: 'qa' })).ok,
+      true,
+    )
+    const extra = await state.wait((s) => s.players.length === 5)
+    assert.equal(extra.players.filter((p) => p.departmentId === 'qa').length, 2)
   })
 })

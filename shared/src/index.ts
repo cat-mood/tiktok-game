@@ -22,6 +22,7 @@ export {
   type AdminAuthPayload,
   type AdminMovePlayerPayload,
   type AdminPlayerPayload,
+  type AdminSpawnPlayerPayload,
   type PlayerChangeDepartmentPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,

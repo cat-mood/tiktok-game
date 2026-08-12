@@ -11,6 +11,8 @@ export const CLIENT_EVENTS = {
   adminStartGame: 'admin:startGame',
   adminNewGame: 'admin:newGame',
   adminDismissRestore: 'admin:dismissRestore',
+  adminSpawnPlayer: 'admin:spawnPlayer',
+  adminFillLobby: 'admin:fillLobby',
 } as const
 
 export const SERVER_EVENTS = {
@@ -42,5 +44,9 @@ export type AdminPlayerPayload = {
 
 export type AdminMovePlayerPayload = {
   playerId: string
+  departmentId: DepartmentId
+}
+
+export type AdminSpawnPlayerPayload = {
   departmentId: DepartmentId
 }

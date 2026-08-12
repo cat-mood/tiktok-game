@@ -157,4 +157,22 @@ describe('GameStore', () => {
     assert.equal(next.phase, 'LOBBY')
     assert.throws(() => store.reconnect(alex.id, oldSession), /другая игра/)
   })
+
+  it('spawns uniquely named players and fills all departments with leads', () => {
+    const store = new GameStore()
+    const first = store.spawnPlayer('development')
+    assert.equal(first.name, 'Алекс')
+    store.spawnPlayer('development')
+    store.fillLobby()
+    const state = store.getState()
+    assert.equal(state.players.filter((p) => p.departmentId === 'development').length, 2)
+    for (const dept of ['development', 'design', 'marketing', 'qa'] as const) {
+      assert.equal(
+        state.players.some((p) => p.departmentId === dept && p.isTeamLead),
+        true,
+      )
+    }
+    store.startGame()
+    assert.equal(store.getState().phase, 'RUNNING')
+  })
 })

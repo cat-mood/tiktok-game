@@ -7,6 +7,7 @@ import {
   type AdminAuthPayload,
   type AdminMovePlayerPayload,
   type AdminPlayerPayload,
+  type AdminSpawnPlayerPayload,
   type PlayerChangeDepartmentPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
@@ -44,6 +45,12 @@ export function registerSocketHandlers(
   const requireAdmin = (socket: Socket) => {
     if (!(socket.data as SocketData).isAdmin) {
       throw new GameError('Нет доступа')
+    }
+  }
+
+  const requireDevTools = () => {
+    if (!runtime.devTools) {
+      throw new GameError('Спавн игроков доступен только в dev')
     }
   }
 
@@ -261,6 +268,36 @@ export function registerSocketHandlers(
       try {
         requireAdmin(socket)
         runtime.dismissRestore()
+        broadcast()
+        ack?.(ok())
+      } catch (error) {
+        ack?.(fail(error))
+      }
+    })
+
+    socket.on(
+      CLIENT_EVENTS.adminSpawnPlayer,
+      async (payload: AdminSpawnPlayerPayload, ack?: (res: Ack) => void) => {
+        try {
+          requireAdmin(socket)
+          requireDevTools()
+          if (!payload || !isDepartmentId(payload.departmentId)) {
+            throw new GameError('Выбери отдел')
+          }
+          await runtime.mutate((store) => store.spawnPlayer(payload.departmentId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(CLIENT_EVENTS.adminFillLobby, async (_payload, ack?: (res: Ack) => void) => {
+      try {
+        requireAdmin(socket)
+        requireDevTools()
+        await runtime.mutate((store) => store.fillLobby())
         broadcast()
         ack?.(ok())
       } catch (error) {

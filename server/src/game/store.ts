@@ -172,6 +172,40 @@ export class GameStore {
     this.state = createEmptyState()
   }
 
+  spawnPlayer(departmentId: DepartmentId): Player {
+    return this.join(this.nextSpawnName(), departmentId)
+  }
+
+  fillLobby(): Player[] {
+    this.requireLobby()
+    const created: Player[] = []
+    for (const dept of DEPARTMENTS) {
+      const members = this.state.players.filter((player) => player.departmentId === dept.id)
+      if (members.length === 0) {
+        created.push(this.join(this.nextSpawnName(), dept.id))
+      }
+      const roster = this.state.players.filter((player) => player.departmentId === dept.id)
+      if (!roster.some((player) => player.isTeamLead)) {
+        this.setTeamLead(roster[0].id)
+      }
+    }
+    return created
+  }
+
+  private nextSpawnName(): string {
+    const taken = new Set(this.state.players.map((player) => player.name))
+    for (const name of SPAWN_NAMES) {
+      if (!taken.has(name)) {
+        return name
+      }
+    }
+    let index = 2
+    while (taken.has(`Бот ${index}`)) {
+      index += 1
+    }
+    return `Бот ${index}`
+  }
+
   private requireLobby(): void {
     if (this.state.phase !== 'LOBBY') {
       throw new GameError('Состав зафиксирован — игра уже началась')
@@ -199,3 +233,18 @@ function cloneState(state: GameState): GameState {
     players: state.players.map((player) => ({ ...player })),
   }
 }
+
+const SPAWN_NAMES = [
+  'Алекс',
+  'Маша',
+  'Иван',
+  'Петя',
+  'Кира',
+  'Лена',
+  'Саша',
+  'Дима',
+  'Ника',
+  'Тимур',
+  'Оля',
+  'Макс',
+]
