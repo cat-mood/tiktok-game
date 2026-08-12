@@ -56,3 +56,17 @@ body {
 .pulse-soft {
   animation: pulse-soft 1.8s ease-in-out infinite;
 }
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.caret-blink {
+  animation: caret-blink 1s steps(1) infinite;
+}

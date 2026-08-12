@@ -217,7 +217,7 @@ function PlayerWork({ me, state, onError }: Props) {
         gameType={task.gameType}
         difficulty={difficulty}
         prompt={task.prompt}
-        timeLimitMs={task.timeLimitMs ?? 60_000}
+        timeLimitMs={task.timeLimitMs ?? 240_000}
         startedAt={task.startedAt}
         serverNow={state.serverNow}
         sprint={state.currentSprint}

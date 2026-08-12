@@ -8,9 +8,10 @@ type Props = {
   prompt: MiniGamePrompt
   answer: unknown
   onAnswerChange: (answer: unknown) => void
+  onComplete?: (answer: unknown) => void
 }
 
-export function GameRenderer({ prompt, answer, onAnswerChange }: Props) {
+export function GameRenderer({ prompt, answer, onAnswerChange, onComplete }: Props) {
   switch (prompt.kind) {
     case 'DECRYPT_MESSAGE':
       return (
@@ -42,6 +43,7 @@ export function GameRenderer({ prompt, answer, onAnswerChange }: Props) {
           prompt={prompt}
           value={typeof answer === 'string' ? answer : ''}
           onChange={onAnswerChange}
+          onComplete={onComplete ? (value) => onComplete(value) : undefined}
         />
       )
     default:

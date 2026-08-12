@@ -341,14 +341,14 @@ describe('GameStore minigames', () => {
     assert.equal(assigned.gameType, GAME_TYPES[0])
     assert.ok(assigned.puzzleId)
     assert.ok(assigned.prompt)
-    assert.equal(assigned.timeLimitMs, 60_000)
+    assert.equal(assigned.timeLimitMs, 240_000)
 
     store.assignDifficulty(alex.id, kira.id, 'HARD')
     const harder = currentTask(store, kira.id)
     assert.equal(harder.gameType, GAME_TYPES[0])
     assert.equal(harder.difficulty, 'HARD')
     assert.ok(harder.puzzleId)
-    assert.equal(harder.timeLimitMs, 40_000)
+    assert.equal(harder.timeLimitMs, 240_000)
   })
 
   it('awards score on a correct answer and rejects a second submit', () => {

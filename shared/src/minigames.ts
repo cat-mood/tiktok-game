@@ -9,10 +9,12 @@ export const GAME_TYPES = [
 
 export type GameType = (typeof GAME_TYPES)[number]
 
+export const MINIGAME_TIME_LIMIT_MS = 240_000
+
 export const TIME_LIMIT_MS_BY_DIFFICULTY: Record<TaskDifficulty, number> = {
-  EASY: 60_000,
-  MEDIUM: 50_000,
-  HARD: 40_000,
+  EASY: MINIGAME_TIME_LIMIT_MS,
+  MEDIUM: MINIGAME_TIME_LIMIT_MS,
+  HARD: MINIGAME_TIME_LIMIT_MS,
 }
 
 export const GAME_TYPE_META: Record<

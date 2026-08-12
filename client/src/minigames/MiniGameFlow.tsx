@@ -69,20 +69,36 @@ export function MiniGameFlow({
     setShowTutorial(false)
   }
 
-  const submit = async () => {
+  const submit = async (override?: unknown) => {
     if (busy || status !== 'IN_PROGRESS') {
       return
     }
     setBusy(true)
     setWrong(false)
-    const result = await onSubmit(answer)
+    const result = await onSubmit(override ?? answer)
     setBusy(false)
     if (result === 'wrong') {
       setWrong(true)
     }
   }
 
+  const autoComplete = prompt.kind === 'SPEED_TYPING'
   const ready = canSubmit(prompt, answer)
+  const footer = autoComplete ? null : (
+    <div>
+      {wrong && (
+        <p className="mb-3 text-center text-lg text-mag">Неправильно, попробуй ещё раз</p>
+      )}
+      <button
+        type="button"
+        disabled={busy || !ready}
+        onClick={() => void submit()}
+        className="w-full rounded-2xl bg-cyan py-4 text-2xl font-bold text-ink disabled:opacity-40"
+      >
+        ПРОВЕРИТЬ
+      </button>
+    </div>
+  )
 
   if (status === 'COMPLETED' || status === 'FAILED') {
     return (
@@ -122,21 +138,7 @@ export function MiniGameFlow({
       departmentName={departmentName}
       endsAt={endsAt}
       serverNow={serverNow}
-      footer={
-        <div>
-          {wrong && (
-            <p className="mb-3 text-center text-lg text-mag">Неправильно, попробуй ещё раз</p>
-          )}
-          <button
-            type="button"
-            disabled={busy || !ready}
-            onClick={() => void submit()}
-            className="w-full rounded-2xl bg-cyan py-4 text-2xl font-bold text-ink disabled:opacity-40"
-          >
-            ПРОВЕРИТЬ
-          </button>
-        </div>
-      }
+      footer={footer}
     >
       <GameRenderer
         prompt={prompt}
@@ -144,6 +146,10 @@ export function MiniGameFlow({
         onAnswerChange={(next) => {
           setWrong(false)
           setAnswer(next)
+        }}
+        onComplete={(next) => {
+          setAnswer(next)
+          void submit(next)
         }}
       />
     </GameShell>

@@ -59,7 +59,7 @@ export function DevSandboxScreen({ enabled, serverNow, onError }: Props) {
       gameType: ack.gameType,
       difficulty: ack.difficulty,
       prompt: ack.prompt,
-      timeLimitMs: ack.timeLimitMs ?? 60_000,
+      timeLimitMs: ack.timeLimitMs ?? 240_000,
       startedAt: new Date().toISOString(),
       status: 'IN_PROGRESS',
       score: 0,

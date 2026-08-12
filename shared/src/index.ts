@@ -31,6 +31,7 @@ export {
 export {
   GAME_TYPES,
   GAME_TYPE_META,
+  MINIGAME_TIME_LIMIT_MS,
   TIME_LIMIT_MS_BY_DIFFICULTY,
   isGameType,
   type AlgorithmCard,
