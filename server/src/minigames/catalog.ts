@@ -1,9 +1,6 @@
-import {
-  TIME_LIMIT_MS_BY_DIFFICULTY,
-  type GameType,
-  type MiniGamePrompt,
-} from '@brainrot/shared'
+import { TIME_LIMIT_MS_BY_DIFFICULTY, type GameType, type MiniGamePrompt } from '@brainrot/shared'
 import type { TaskDifficulty } from '@brainrot/shared'
+import { SPEED_TYPING_TEXTS } from './speed-typing-texts.js'
 
 export type PuzzleAnswer = string | string[]
 
@@ -42,6 +39,27 @@ function encodeNumbers(text: string): string {
 
 function reversePhrase(text: string): string {
   return [...text].reverse().join('')
+}
+
+function normalizeTypingText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function toTypingPuzzle(item: (typeof SPEED_TYPING_TEXTS)[number]): Puzzle {
+  const text = normalizeTypingText(item.text)
+  return {
+    id: `type-${item.id}`,
+    gameType: 'SPEED_TYPING',
+    difficulty: item.difficulty,
+    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY[item.difficulty],
+    prompt: {
+      kind: 'SPEED_TYPING',
+      title: 'Скоропечать',
+      instruction: 'Напечатай текст.',
+      text,
+    },
+    answer: text,
+  }
 }
 
 const NUMBER_KEY = numberKey()
@@ -481,123 +499,7 @@ export const PUZZLES: Puzzle[] = [
     answer: '16',
   },
 
-  {
-    id: 'type-easy-shoot',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'EASY',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.EASY,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'СНИМИ ВИДЕО',
-    },
-    answer: 'СНИМИ ВИДЕО',
-  },
-  {
-    id: 'type-easy-like',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'EASY',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.EASY,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'ПОСТАВЬ ЛАЙК',
-    },
-    answer: 'ПОСТАВЬ ЛАЙК',
-  },
-  {
-    id: 'type-easy-open',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'EASY',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.EASY,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'ОТКРОЙ TIKTOK',
-    },
-    answer: 'ОТКРОЙ TIKTOK',
-  },
-  {
-    id: 'type-medium-new',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'MEDIUM',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.MEDIUM,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'СНИМИ НОВОЕ ВИДЕО',
-    },
-    answer: 'СНИМИ НОВОЕ ВИДЕО',
-  },
-  {
-    id: 'type-medium-upload',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'MEDIUM',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.MEDIUM,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'ЗАГРУЗИ ВИДЕО В ЛЕНТУ',
-    },
-    answer: 'ЗАГРУЗИ ВИДЕО В ЛЕНТУ',
-  },
-  {
-    id: 'type-medium-check',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'MEDIUM',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.MEDIUM,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу как можно быстрее.',
-      text: 'ПРОВЕРЬ НОВЫЙ РОЛИК',
-    },
-    answer: 'ПРОВЕРЬ НОВЫЙ РОЛИК',
-  },
-  {
-    id: 'type-hard-ready',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'HARD',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.HARD,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу точно, вместе со знаками.',
-      text: 'ТВОЙ TIKTOK ГОТОВ!',
-    },
-    answer: 'ТВОЙ TIKTOK ГОТОВ!',
-  },
-  {
-    id: 'type-hard-three',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'HARD',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.HARD,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу точно, вместе с цифрой.',
-      text: 'СНИМИ 3 НОВЫХ РОЛИКА',
-    },
-    answer: 'СНИМИ 3 НОВЫХ РОЛИКА',
-  },
-  {
-    id: 'type-hard-ok',
-    gameType: 'SPEED_TYPING',
-    difficulty: 'HARD',
-    timeLimitMs: TIME_LIMIT_MS_BY_DIFFICULTY.HARD,
-    prompt: {
-      kind: 'SPEED_TYPING',
-      title: 'Скоропечать',
-      instruction: 'Напечатай фразу точно, вместе со знаками.',
-      text: 'ПРОВЕРЬ РОЛИК №2 И ЖМИ «ОК»',
-    },
-    answer: 'ПРОВЕРЬ РОЛИК №2 И ЖМИ «ОК»',
-  },
+  ...SPEED_TYPING_TEXTS.map(toTypingPuzzle),
 ]
 
 const puzzlesById = new Map(PUZZLES.map((puzzle) => [puzzle.id, puzzle]))

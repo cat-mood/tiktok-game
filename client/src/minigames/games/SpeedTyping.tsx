@@ -10,7 +10,8 @@ type Props = {
 
 export function SpeedTyping({ prompt, value, onChange, onComplete }: Props) {
   const target = prompt.text
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const activeRef = useRef<HTMLSpanElement>(null)
   const [focused, setFocused] = useState(false)
   const [miss, setMiss] = useState(false)
   const completedRef = useRef(false)
@@ -22,6 +23,10 @@ export function SpeedTyping({ prompt, value, onChange, onComplete }: Props) {
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' })
+  }, [index])
 
   const applyTyped = (next: string) => {
     if (completedRef.current) {
@@ -65,17 +70,17 @@ export function SpeedTyping({ prompt, value, onChange, onComplete }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <h1 className="text-center font-display text-3xl leading-none">{prompt.title}</h1>
-      <p className="mt-3 text-center text-white/60">Печатай букву за буквой. Ошибка — остаёшься на месте.</p>
+      <p className="mt-2 text-center text-white/55">Печатай текст. Ошибка — курсор не двигается.</p>
 
       <div
         role="presentation"
         onClick={() => inputRef.current?.focus()}
         className={[
-          'relative mt-6 flex flex-1 flex-col items-center justify-center rounded-3xl border px-4 py-6',
+          'relative mt-4 flex min-h-0 flex-1 flex-col rounded-3xl border px-4 py-5',
           miss ? 'border-mag bg-mag/15' : 'border-line bg-panel',
         ].join(' ')}
       >
-        <input
+        <textarea
           ref={inputRef}
           value={value}
           onChange={(event) => handleChange(event.target.value)}
@@ -90,21 +95,20 @@ export function SpeedTyping({ prompt, value, onChange, onComplete }: Props) {
           autoCorrect="off"
           autoComplete="off"
           spellCheck={false}
-          enterKeyHint="done"
-          className="absolute inset-0 cursor-text opacity-0"
+          className="absolute inset-0 resize-none opacity-0"
           style={{ fontSize: 16, caretColor: 'transparent' }}
           aria-label="Поле печати"
         />
 
         {!done && (
-          <div className="pointer-events-none text-center">
+          <div className="pointer-events-none shrink-0 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/35">
               Сейчас нажми
             </p>
             <div
               className={[
-                'mt-3 font-display leading-none',
-                current === ' ' ? 'text-5xl' : 'text-7xl',
+                'mt-2 font-display leading-none',
+                current === ' ' ? 'text-4xl' : 'text-6xl',
                 miss ? 'text-mag' : 'text-cyan',
               ].join(' ')}
             >
@@ -113,29 +117,36 @@ export function SpeedTyping({ prompt, value, onChange, onComplete }: Props) {
           </div>
         )}
 
-        {done && <p className="pointer-events-none font-display text-3xl text-gold">Готово!</p>}
+        {done && (
+          <p className="pointer-events-none shrink-0 text-center font-display text-3xl text-gold">
+            Готово!
+          </p>
+        )}
 
-        <div className="pointer-events-none mt-8 flex flex-wrap justify-center gap-1">
-          {[...target].map((char, charIndex) => {
-            const typed = charIndex < index
-            const active = charIndex === index && !done
-            return (
-              <span
-                key={`${char}-${charIndex}`}
-                className={[
-                  'min-w-[0.7em] rounded-md px-0.5 text-center font-display text-3xl leading-tight',
-                  typed ? 'text-cyan/70' : 'text-white/35',
-                  active ? 'caret-blink bg-cyan text-ink' : '',
-                  active && miss ? 'bg-mag text-white' : '',
-                ].join(' ')}
-              >
-                {char === ' ' ? '·' : char}
-              </span>
-            )
-          })}
+        <div className="pointer-events-none mt-4 min-h-0 flex-1 overflow-y-auto">
+          <p className="text-left text-xl leading-relaxed">
+            {[...target].map((char, charIndex) => {
+              const typed = charIndex < index
+              const active = charIndex === index && !done
+              return (
+                <span
+                  key={`${char}-${charIndex}`}
+                  ref={active ? activeRef : undefined}
+                  className={[
+                    'rounded-sm',
+                    typed ? 'text-cyan/80' : 'text-white/35',
+                    active ? 'caret-blink bg-cyan text-ink' : '',
+                    active && miss ? 'bg-mag text-white' : '',
+                  ].join(' ')}
+                >
+                  {char}
+                </span>
+              )
+            })}
+          </p>
         </div>
 
-        <p className="pointer-events-none mt-6 text-sm text-white/40">
+        <p className="pointer-events-none mt-3 shrink-0 text-center text-sm text-white/40">
           {index} / {target.length}
           {!focused && !done ? ' · нажми, чтобы печатать' : ''}
         </p>
