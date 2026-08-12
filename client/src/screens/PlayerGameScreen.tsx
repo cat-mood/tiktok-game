@@ -10,6 +10,7 @@ import {
 import { SprintTimer } from '../components/SprintTimer'
 import { currentTaskFor, DIFFICULTY_META, taskReward } from '../lib/tasks'
 import { departmentById } from '../lib/departments'
+import { MiniGameFlow } from '../minigames/MiniGameFlow'
 import { emitAck } from '../socket'
 
 type Props = {
@@ -165,14 +166,14 @@ function TeamLeadPlanning({ me, state, onError }: Props) {
 
 function PlayerWork({ me, state, onError }: Props) {
   const [busy, setBusy] = useState(false)
-  const [showPlaceholder, setShowPlaceholder] = useState(false)
   const task = currentTaskFor(state, me.id)
   const difficulty = task?.difficulty
   const meta = difficulty ? DIFFICULTY_META[difficulty] : null
+  const dept = departmentById(me.departmentId)
 
-  const run = async (event: string) => {
+  const run = async (event: string, payload?: unknown) => {
     setBusy(true)
-    const ack = await emitAck(event)
+    const ack = await emitAck(event, payload)
     setBusy(false)
     if (!ack.ok) {
       onError(ack.error)
@@ -182,10 +183,52 @@ function PlayerWork({ me, state, onError }: Props) {
   }
 
   const start = async () => {
-    const ok = await run(CLIENT_EVENTS.playerStartTask)
-    if (ok) {
-      setShowPlaceholder(true)
+    await run(CLIENT_EVENTS.playerStartTask)
+  }
+
+  const submit = async (answer: unknown) => {
+    if (!task) {
+      return 'error' as const
     }
+    const ack = await emitAck(CLIENT_EVENTS.playerSubmitAnswer, { taskId: task.id, answer })
+    if (!ack.ok) {
+      onError(ack.error)
+      return 'error' as const
+    }
+    return ack.correct ? ('correct' as const) : ('wrong' as const)
+  }
+
+  const expire = () => {
+    if (!task) {
+      return
+    }
+    void emitAck(CLIENT_EVENTS.playerExpireTask, { taskId: task.id })
+  }
+
+  if (
+    task &&
+    task.gameType &&
+    task.prompt &&
+    difficulty &&
+    (task.status === 'IN_PROGRESS' || task.status === 'COMPLETED' || task.status === 'FAILED')
+  ) {
+    return (
+      <MiniGameFlow
+        gameType={task.gameType}
+        difficulty={difficulty}
+        prompt={task.prompt}
+        timeLimitMs={task.timeLimitMs ?? 60_000}
+        startedAt={task.startedAt}
+        serverNow={state.serverNow}
+        sprint={state.currentSprint}
+        departmentName={dept.name}
+        status={task.status}
+        score={task.score}
+        playerId={me.id}
+        onSubmit={submit}
+        onExpire={expire}
+      />
+    )
   }
 
   return (
@@ -224,13 +267,13 @@ function PlayerWork({ me, state, onError }: Props) {
             </button>
           )}
 
-          {(task.status === 'IN_PROGRESS' || showPlaceholder) && task.status !== 'COMPLETED' && (
+          {task.status === 'IN_PROGRESS' && !task.gameType && (
             <p className="mt-8 rounded-2xl bg-white/5 px-4 py-4 text-white/55">
               Мини-игра будет добавлена на следующем этапе.
             </p>
           )}
 
-          {task.status === 'IN_PROGRESS' && (
+          {task.status === 'IN_PROGRESS' && !task.gameType && (
             <button
               type="button"
               disabled={busy}
@@ -243,6 +286,10 @@ function PlayerWork({ me, state, onError }: Props) {
 
           {task.status === 'COMPLETED' && (
             <p className="mt-8 font-display text-3xl text-gold">Готово · +{task.score}</p>
+          )}
+
+          {task.status === 'FAILED' && (
+            <p className="mt-8 font-display text-3xl text-mag">Время вышло</p>
           )}
         </section>
       ) : (

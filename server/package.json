@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/dev.ts",
     "start": "tsx src/index.ts",
-    "test": "tsx --test src/game/store.test.ts src/game/persist.test.ts src/socket/handlers.test.ts"
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@brainrot/shared": "*",

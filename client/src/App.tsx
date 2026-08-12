@@ -3,11 +3,32 @@ import { LobbyScreen } from './screens/LobbyScreen'
 import { PlayerGameScreen } from './screens/PlayerGameScreen'
 import { AdminLogin } from './screens/AdminLogin'
 import { AdminScreen, useAdminSession } from './screens/AdminScreen'
+import { DevSandboxScreen } from './screens/DevSandboxScreen'
 import { useGame } from './hooks/useGame'
 
 export function App() {
-  const isAdmin = window.location.pathname.startsWith('/admin')
-  return isAdmin ? <AdminApp /> : <PlayerApp />
+  const path = window.location.pathname
+  if (path.startsWith('/admin')) {
+    return <AdminApp />
+  }
+  if (path.startsWith('/dev')) {
+    return <DevApp />
+  }
+  return <PlayerApp />
+}
+
+function DevApp() {
+  const game = useGame()
+  return (
+    <div className="grid-overlay min-h-dvh">
+      <ConnectionBar connected={game.connected} error={game.error} onDismiss={() => game.setError(null)} />
+      <DevSandboxScreen
+        enabled={game.state.devTools}
+        serverNow={game.state.serverNow}
+        onError={game.setError}
+      />
+    </div>
+  )
 }
 
 function PlayerApp() {

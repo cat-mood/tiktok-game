@@ -1,10 +1,12 @@
+import type { GameType, MiniGamePrompt } from './minigames.js'
+
 export type DepartmentId = 'development' | 'design' | 'marketing' | 'qa'
 
 export type GamePhase = 'LOBBY' | 'PLANNING' | 'WORK' | 'FINISHED'
 
 export type TaskDifficulty = 'EASY' | 'MEDIUM' | 'HARD'
 
-export type TaskStatus = 'NOT_ASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED'
+export type TaskStatus = 'NOT_ASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
 
 export type Player = {
   id: string
@@ -22,7 +24,11 @@ export type Task = {
   difficulty: TaskDifficulty | null
   status: TaskStatus
   score: number
-  gameType: string | null
+  gameType: GameType | null
+  puzzleId: string | null
+  timeLimitMs: number | null
+  startedAt: string | null
+  prompt: MiniGamePrompt | null
 }
 
 export type GameState = {
@@ -49,5 +55,15 @@ export type Identity = {
 }
 
 export type Ack =
-  | { ok: true; playerId?: string }
+  | {
+      ok: true
+      playerId?: string
+      correct?: boolean
+      sandboxId?: string
+      prompt?: MiniGamePrompt
+      timeLimitMs?: number
+      gameType?: GameType
+      difficulty?: TaskDifficulty
+      revealAnswer?: string
+    }
   | { ok: false; error: string }

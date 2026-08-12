@@ -1,3 +1,4 @@
+import type { GameType } from './minigames.js'
 import type { DepartmentId, TaskDifficulty } from './types.js'
 
 export const CLIENT_EVENTS = {
@@ -7,6 +8,8 @@ export const CLIENT_EVENTS = {
   teamLeadAssignDifficulty: 'teamLead:assignDifficulty',
   playerStartTask: 'player:startTask',
   playerCompleteTask: 'player:completeTask',
+  playerSubmitAnswer: 'player:submitAnswer',
+  playerExpireTask: 'player:expireTask',
   adminAuth: 'admin:auth',
   adminSetTeamLead: 'admin:setTeamLead',
   adminMovePlayer: 'admin:movePlayer',
@@ -17,6 +20,9 @@ export const CLIENT_EVENTS = {
   adminDismissRestore: 'admin:dismissRestore',
   adminSpawnPlayer: 'admin:spawnPlayer',
   adminFillLobby: 'admin:fillLobby',
+  devStartMinigame: 'dev:startMinigame',
+  devSubmitAnswer: 'dev:submitAnswer',
+  devExpireMinigame: 'dev:expireMinigame',
 } as const
 
 export const SERVER_EVENTS = {
@@ -58,4 +64,27 @@ export type AdminSpawnPlayerPayload = {
 export type TeamLeadAssignDifficultyPayload = {
   playerId: string
   difficulty: TaskDifficulty
+}
+
+export type PlayerSubmitAnswerPayload = {
+  taskId: string
+  answer: unknown
+}
+
+export type PlayerExpireTaskPayload = {
+  taskId: string
+}
+
+export type DevStartMinigamePayload = {
+  gameType: GameType
+  difficulty: TaskDifficulty
+}
+
+export type DevSubmitAnswerPayload = {
+  sandboxId: string
+  answer: unknown
+}
+
+export type DevExpireMinigamePayload = {
+  sandboxId: string
 }

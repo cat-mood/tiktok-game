@@ -129,6 +129,12 @@ export function JoinScreen({ state, onJoined, onError }: Props) {
           Присоединиться
         </button>
       )}
+
+      {state.devTools && (
+        <a href="/dev" className="mt-8 self-center text-sm text-gold/70">
+          Поиграть в мини-игры
+        </a>
+      )}
     </div>
   )
 }

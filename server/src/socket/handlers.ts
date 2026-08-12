@@ -9,13 +9,19 @@ import {
   type AdminMovePlayerPayload,
   type AdminPlayerPayload,
   type AdminSpawnPlayerPayload,
+  type DevExpireMinigamePayload,
+  type DevStartMinigamePayload,
+  type DevSubmitAnswerPayload,
   type PlayerChangeDepartmentPayload,
+  type PlayerExpireTaskPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
+  type PlayerSubmitAnswerPayload,
   type TeamLeadAssignDifficultyPayload,
 } from '@brainrot/shared'
 import type { GameRuntime } from '../game/runtime.js'
 import { GameError } from '../game/store.js'
+import { MinigameSandbox } from '../minigames/sandbox.js'
 
 const LOBBY_GRACE_MS = 20_000
 
@@ -31,6 +37,7 @@ export function registerSocketHandlers(
 ): void {
   const playerSockets = new Map<string, Set<string>>()
   const graceTimers = new Map<string, NodeJS.Timeout>()
+  const sandbox = new MinigameSandbox()
 
   const broadcast = () => {
     io.emit(SERVER_EVENTS.gameState, runtime.getClientState())
@@ -218,6 +225,94 @@ export function registerSocketHandlers(
         ack?.(fail(error))
       }
     })
+
+    socket.on(
+      CLIENT_EVENTS.playerSubmitAnswer,
+      async (payload: PlayerSubmitAnswerPayload, ack?: (res: Ack) => void) => {
+        try {
+          const playerId = requirePlayerId(socket)
+          if (!payload?.taskId) {
+            throw new GameError('Задача не найдена')
+          }
+          const correct = await runtime.mutate((store) =>
+            store.submitAnswer(playerId, payload.taskId, payload.answer),
+          )
+          broadcast()
+          ack?.({ ok: true, correct })
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.playerExpireTask,
+      async (payload: PlayerExpireTaskPayload, ack?: (res: Ack) => void) => {
+        try {
+          const playerId = requirePlayerId(socket)
+          if (!payload?.taskId) {
+            throw new GameError('Задача не найдена')
+          }
+          await runtime.mutate((store) => store.expireTask(playerId, payload.taskId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.devStartMinigame,
+      (payload: DevStartMinigamePayload, ack?: (res: Ack) => void) => {
+        try {
+          requireDevTools()
+          const started = sandbox.start(payload?.gameType, payload?.difficulty)
+          ack?.({
+            ok: true,
+            sandboxId: started.sandboxId,
+            prompt: started.prompt,
+            timeLimitMs: started.timeLimitMs,
+            gameType: started.gameType,
+            difficulty: started.difficulty,
+          })
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.devSubmitAnswer,
+      (payload: DevSubmitAnswerPayload, ack?: (res: Ack) => void) => {
+        try {
+          requireDevTools()
+          if (!payload?.sandboxId) {
+            throw new GameError('Игра не найдена')
+          }
+          const result = sandbox.submit(payload.sandboxId, payload.answer)
+          ack?.({ ok: true, correct: result.correct, revealAnswer: result.revealAnswer })
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.devExpireMinigame,
+      (payload: DevExpireMinigamePayload, ack?: (res: Ack) => void) => {
+        try {
+          requireDevTools()
+          if (!payload?.sandboxId) {
+            throw new GameError('Игра не найдена')
+          }
+          const result = sandbox.expire(payload.sandboxId)
+          ack?.({ ok: true, revealAnswer: result.revealAnswer })
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
 
     socket.on(
       CLIENT_EVENTS.adminAuth,

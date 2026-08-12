@@ -12,6 +12,7 @@ import {
   type Ack,
   type ClientGameState,
 } from '@brainrot/shared'
+import { getPuzzle } from '../minigames/catalog.js'
 import { GameRuntime } from '../game/runtime.js'
 import { registerSocketHandlers } from './handlers.js'
 
@@ -401,7 +402,39 @@ describe('socket sprint flow', () => {
       true,
     )
     assert.equal((await emitAck(kiraSock.client, CLIENT_EVENTS.playerStartTask)).ok, true)
-    assert.equal((await emitAck(kiraSock.client, CLIENT_EVENTS.playerCompleteTask)).ok, true)
+    const inProgress = await admin.state.wait((s) =>
+      s.tasks.some((task) => task.playerId === kira.id && task.status === 'IN_PROGRESS'),
+    )
+    const kiraLive = inProgress.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
+    const puzzle = getPuzzle(kiraLive.puzzleId ?? '')
+    assert.ok(puzzle)
+    assert.equal(kiraLive.gameType, puzzle.gameType)
+    assert.ok(kiraLive.prompt)
+    assert.equal(
+      (
+        await emitAck(kiraSock.client, CLIENT_EVENTS.playerCompleteTask)
+      ).ok,
+      false,
+    )
+    const wrong = await emitAck(kiraSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
+      taskId: kiraLive.id,
+      answer: 'НЕТ',
+    })
+    assert.equal(wrong.ok, true)
+    assert.equal(wrong.correct, false)
+    const stolen = await emitAck(leadSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
+      taskId: kiraLive.id,
+      answer: puzzle.answer,
+    })
+    assert.equal(stolen.ok, false)
+    const stillOpen = runtime.store.getState().tasks.find((task) => task.id === kiraLive.id)!
+    assert.equal(stillOpen.status, 'IN_PROGRESS')
+    const submitted = await emitAck(kiraSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
+      taskId: kiraLive.id,
+      answer: puzzle.answer,
+    })
+    assert.equal(submitted.ok, true)
+    assert.equal(submitted.correct, true)
     const completed = await admin.state.wait((s) =>
       s.tasks.some((task) => task.playerId === kira.id && task.status === 'COMPLETED'),
     )
@@ -433,5 +466,129 @@ describe('socket sprint flow', () => {
       sprint2.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)?.status,
       'COMPLETED',
     )
+  })
+})
+
+describe('socket minigame sandbox', () => {
+  let dataDir = ''
+  let url = ''
+  let io: Server
+  let httpServer: ReturnType<typeof createServer>
+  let runtime: GameRuntime
+  const clients: ClientSocket[] = []
+
+  after(async () => {
+    for (const client of clients) {
+      client.close()
+    }
+    if (io) {
+      io.close()
+    }
+    runtime?.stop()
+    if (httpServer) {
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    }
+    if (runtime) {
+      await runtime.flush()
+    }
+    if (dataDir) {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  async function boot(devTools: boolean) {
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-sandbox-'))
+    runtime = await GameRuntime.create(dataDir, { devTools })
+    httpServer = createServer()
+    io = new Server(httpServer, { cors: { origin: true } })
+    registerSocketHandlers(io, runtime, ADMIN_CODE)
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+    const address = httpServer.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('No listen address')
+    }
+    url = `http://127.0.0.1:${address.port}`
+  }
+
+  it('lets a client play a sandbox game without changing live tasks', async () => {
+    await boot(true)
+    const client = ioc(url, { transports: ['websocket'] })
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+
+    const started = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
+      gameType: 'SEQUENCE',
+      difficulty: 'EASY',
+    })
+    assert.equal(started.ok, true)
+    assert.ok(started.sandboxId)
+    assert.ok(started.prompt)
+    assert.equal(runtime.store.getState().tasks.length, 0)
+
+    const wrong = await emitAck(client, CLIENT_EVENTS.devSubmitAnswer, {
+      sandboxId: started.sandboxId,
+      answer: '0',
+    })
+    assert.equal(wrong.ok, true)
+    assert.equal(wrong.correct, false)
+
+    const prompt = started.prompt
+    assert.ok(prompt && prompt.kind === 'SEQUENCE')
+    const fromCatalog = getPuzzle(
+      runtime.store.getState().tasks[0]?.puzzleId ?? '',
+    )
+    assert.equal(fromCatalog, undefined)
+
+    const second = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
+      gameType: 'SPEED_TYPING',
+      difficulty: 'EASY',
+    })
+    assert.equal(second.ok, true)
+    assert.equal(runtime.store.getState().tasks.length, 0)
+  })
+})
+
+describe('socket sandbox requires dev tools', () => {
+  let dataDir = ''
+  let url = ''
+  let io: Server
+  let httpServer: ReturnType<typeof createServer>
+  let runtime: GameRuntime
+  const clients: ClientSocket[] = []
+
+  before(async () => {
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-nodev-'))
+    runtime = await GameRuntime.create(dataDir)
+    httpServer = createServer()
+    io = new Server(httpServer, { cors: { origin: true } })
+    registerSocketHandlers(io, runtime, ADMIN_CODE)
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+    const address = httpServer.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('No listen address')
+    }
+    url = `http://127.0.0.1:${address.port}`
+  })
+
+  after(async () => {
+    for (const client of clients) {
+      client.close()
+    }
+    io.close()
+    runtime.stop()
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    await runtime.flush()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  it('rejects sandbox events when DEV_TOOLS is off', async () => {
+    const client = ioc(url, { transports: ['websocket'] })
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+    const ack = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
+      gameType: 'SEQUENCE',
+      difficulty: 'EASY',
+    })
+    assert.equal(ack.ok, false)
   })
 })

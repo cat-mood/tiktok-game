@@ -79,6 +79,14 @@ export function AdminScreen({ state, onError }: Props) {
               Заполнить лобби
             </button>
           )}
+          {state.devTools && (
+            <a
+              href="/dev"
+              className="rounded-2xl border border-cyan/50 px-5 py-3 text-lg font-bold text-cyan"
+            >
+              Песочница мини-игр
+            </a>
+          )}
         </div>
       </header>
 

@@ -1,23 +1,29 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import {
   DEFAULT_PLANNING_MS,
   DEFAULT_WORK_MS,
   DEPARTMENTS,
   SCORE_BY_DIFFICULTY,
+  TIME_LIMIT_MS_BY_DIFFICULTY,
   TOTAL_SPRINTS,
   isDepartmentId,
+  isGameType,
   type DepartmentId,
   type GamePhase,
   type GameState,
   type Player,
   type Task,
   type TaskDifficulty,
+  type TaskStatus,
 } from '@brainrot/shared'
+import { pickGameType, pickPuzzle, requirePuzzle } from '../minigames/pick.js'
+import { answersMatch } from '../minigames/validate.js'
 
 export type GameStoreOptions = {
   planningMs?: number
   workMs?: number
   now?: () => number
+  randomInt?: (maxExclusive: number) => number
 }
 
 export function createEmptyState(): GameState {
@@ -63,7 +69,7 @@ export function normalizeSnapshot(snapshot: GameState): GameState {
     phaseStartedAt: snapshot.phaseStartedAt ?? null,
     phaseEndsAt: snapshot.phaseEndsAt ?? null,
     players: Array.isArray(snapshot.players) ? snapshot.players.map((player) => ({ ...player })) : [],
-    tasks: Array.isArray(snapshot.tasks) ? snapshot.tasks.map((task) => ({ ...task })) : [],
+    tasks: Array.isArray(snapshot.tasks) ? snapshot.tasks.map((task) => normalizeTask(task)) : [],
     autoAssignedCount: snapshot.autoAssignedCount ?? 0,
   }
 }
@@ -73,12 +79,14 @@ export class GameStore {
   private readonly planningMs: number
   private readonly workMs: number
   private readonly now: () => number
+  private readonly randomInt: (maxExclusive: number) => number
 
   constructor(state: GameState = createEmptyState(), options: GameStoreOptions = {}) {
     this.state = cloneState(state)
     this.planningMs = options.planningMs ?? DEFAULT_PLANNING_MS
     this.workMs = options.workMs ?? DEFAULT_WORK_MS
     this.now = options.now ?? Date.now
+    this.randomInt = options.randomInt ?? randomInt
   }
 
   static fromSnapshot(snapshot: GameState, options: GameStoreOptions = {}): GameStore {
@@ -238,6 +246,7 @@ export class GameStore {
     const task = this.requireCurrentTask(playerId)
     task.difficulty = difficulty
     task.status = 'ASSIGNED'
+    this.assignPuzzle(task)
     this.touch()
   }
 
@@ -250,6 +259,7 @@ export class GameStore {
       throw new GameError('Задачу нельзя начать')
     }
     task.status = 'IN_PROGRESS'
+    task.startedAt = new Date(this.now()).toISOString()
     this.touch()
   }
 
@@ -258,6 +268,9 @@ export class GameStore {
       throw new GameError('Задачу можно завершить только во время спринта')
     }
     const task = this.requireCurrentTask(playerId)
+    if (task.gameType) {
+      throw new GameError('Сначала реши мини-игру')
+    }
     if (task.status !== 'IN_PROGRESS') {
       throw new GameError('Сначала начни задачу')
     }
@@ -266,6 +279,58 @@ export class GameStore {
     }
     task.status = 'COMPLETED'
     task.score = SCORE_BY_DIFFICULTY[task.difficulty]
+    this.touch()
+  }
+
+  submitAnswer(playerId: string, taskId: string, answer: unknown): boolean {
+    if (this.state.phase !== 'WORK') {
+      throw new GameError('Задачу можно завершить только во время спринта')
+    }
+    const task = this.requireTaskById(taskId)
+    if (task.playerId !== playerId) {
+      throw new GameError('Это не твоя задача')
+    }
+    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+      throw new GameError('Задачу уже нельзя выполнить')
+    }
+    if (task.status !== 'IN_PROGRESS') {
+      throw new GameError('Сначала начни задачу')
+    }
+    if (!task.gameType || !task.puzzleId || !task.difficulty) {
+      throw new GameError('У задачи нет мини-игры')
+    }
+    if (this.isTaskExpired(task)) {
+      task.status = 'FAILED'
+      task.score = 0
+      this.touch()
+      throw new GameError('Время вышло')
+    }
+    const puzzle = requirePuzzle(task.puzzleId)
+    if (!answersMatch(puzzle.answer, answer)) {
+      return false
+    }
+    task.status = 'COMPLETED'
+    task.score = SCORE_BY_DIFFICULTY[task.difficulty]
+    this.touch()
+    return true
+  }
+
+  expireTask(playerId: string, taskId: string): void {
+    const task = this.requireTaskById(taskId)
+    if (task.playerId !== playerId) {
+      throw new GameError('Это не твоя задача')
+    }
+    if (task.status === 'FAILED') {
+      return
+    }
+    if (task.status !== 'IN_PROGRESS') {
+      throw new GameError('Задачу нельзя завершить')
+    }
+    if (!this.isTaskExpired(task)) {
+      throw new GameError('Время ещё не вышло')
+    }
+    task.status = 'FAILED'
+    task.score = 0
     this.touch()
   }
 
@@ -344,7 +409,11 @@ export class GameStore {
         difficulty: null,
         status: 'NOT_ASSIGNED',
         score: 0,
-        gameType: null,
+        gameType: player.departmentId === 'development' ? pickGameType(this.randomInt) : null,
+        puzzleId: null,
+        timeLimitMs: null,
+        startedAt: null,
+        prompt: null,
       }
       this.state.tasks.push(task)
     }
@@ -358,6 +427,9 @@ export class GameStore {
         task.difficulty = 'EASY'
         task.status = 'ASSIGNED'
         count += 1
+      }
+      if (task.gameType && !task.puzzleId) {
+        this.assignPuzzle(task)
       }
     }
     this.state.autoAssignedCount = count
@@ -408,6 +480,37 @@ export class GameStore {
     return task
   }
 
+  private requireTaskById(taskId: string): Task {
+    const task = this.state.tasks.find((item) => item.id === taskId)
+    if (!task) {
+      throw new GameError('Задача не найдена')
+    }
+    return task
+  }
+
+  private assignPuzzle(task: Task): void {
+    if (!task.gameType || !task.difficulty) {
+      return
+    }
+    const exclude = this.state.tasks
+      .filter(
+        (item) =>
+          item.playerId === task.playerId && item.id !== task.id && Boolean(item.puzzleId),
+      )
+      .map((item) => item.puzzleId as string)
+    const puzzle = pickPuzzle(task.gameType, task.difficulty, exclude, this.randomInt)
+    task.puzzleId = puzzle.id
+    task.timeLimitMs = puzzle.timeLimitMs ?? TIME_LIMIT_MS_BY_DIFFICULTY[task.difficulty]
+    task.prompt = structuredClone(puzzle.prompt)
+  }
+
+  private isTaskExpired(task: Task): boolean {
+    if (!task.startedAt || !task.timeLimitMs) {
+      return false
+    }
+    return this.now() >= Date.parse(task.startedAt) + task.timeLimitMs
+  }
+
   private touch(): void {
     this.state.updatedAt = new Date().toISOString()
   }
@@ -424,6 +527,32 @@ function cloneState(state: GameState): GameState {
     players: state.players.map((player) => ({ ...player })),
     tasks: state.tasks.map((task) => ({ ...task })),
     autoAssignedCount: state.autoAssignedCount,
+  }
+}
+
+const TASK_STATUSES: TaskStatus[] = [
+  'NOT_ASSIGNED',
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'FAILED',
+]
+
+function normalizeTask(task: Task): Task {
+  const status = TASK_STATUSES.includes(task.status) ? task.status : 'NOT_ASSIGNED'
+  return {
+    id: task.id,
+    playerId: task.playerId,
+    teamId: task.teamId,
+    sprint: task.sprint,
+    difficulty: task.difficulty ?? null,
+    status,
+    score: typeof task.score === 'number' ? task.score : 0,
+    gameType: isGameType(task.gameType) ? task.gameType : null,
+    puzzleId: task.puzzleId ?? null,
+    timeLimitMs: typeof task.timeLimitMs === 'number' ? task.timeLimitMs : null,
+    startedAt: task.startedAt ?? null,
+    prompt: task.prompt ?? null,
   }
 }
 

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { GAME_TYPES } from '@brainrot/shared'
+import { getPuzzle } from '../minigames/catalog.js'
 import { GameError, GameStore } from './store.js'
 
 function seedFourLeads(store: GameStore) {
@@ -12,6 +14,18 @@ function seedFourLeads(store: GameStore) {
   store.setTeamLead(ivan.id)
   store.setTeamLead(petya.id)
   return { alex, masha, ivan, petya }
+}
+
+function currentTask(store: GameStore, playerId: string) {
+  const state = store.getState()
+  return state.tasks.find((task) => task.playerId === playerId && task.sprint === state.currentSprint)!
+}
+
+function completeMinigame(store: GameStore, playerId: string) {
+  const task = currentTask(store, playerId)
+  const puzzle = getPuzzle(task.puzzleId ?? '')
+  assert.ok(puzzle, 'puzzle must be assigned')
+  return store.submitAnswer(playerId, task.id, puzzle.answer)
 }
 
 describe('GameStore', () => {
@@ -232,7 +246,7 @@ describe('GameStore sprints', () => {
     assert.throws(() => store.assignDifficulty(alex.id, kira.id, 'EASY'), /только во время планирования/)
     store.startTask(kira.id)
     assert.equal(store.getState().tasks.find((task) => task.playerId === kira.id)?.status, 'IN_PROGRESS')
-    store.completeTask(kira.id)
+    completeMinigame(store, kira.id)
     const done = store.getState().tasks.find((task) => task.playerId === kira.id)!
     assert.equal(done.status, 'COMPLETED')
     assert.equal(done.score, 300)
@@ -246,7 +260,7 @@ describe('GameStore sprints', () => {
     store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
     store.advancePhase()
     store.startTask(kira.id)
-    store.completeTask(kira.id)
+    completeMinigame(store, kira.id)
     const sprint1Id = store.getState().tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!.id
     store.advancePhase()
     const state = store.getState()
@@ -308,5 +322,162 @@ describe('GameStore sprints', () => {
     store.startGame()
     assert.equal(store.isPhaseDue(Date.now() - 5_000), false)
     assert.equal(store.isPhaseDue(Date.parse(store.getState().phaseEndsAt!) + 1), true)
+  })
+})
+
+describe('GameStore minigames', () => {
+  it('assigns a stable development gameType and a puzzle after difficulty', () => {
+    const store = new GameStore(undefined, { randomInt: () => 0 })
+    const { alex, masha } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    const created = currentTask(store, kira.id)
+    assert.equal(created.gameType, GAME_TYPES[0])
+    assert.equal(created.puzzleId, null)
+    assert.equal(currentTask(store, masha.id).gameType, null)
+
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    const assigned = currentTask(store, kira.id)
+    assert.equal(assigned.gameType, GAME_TYPES[0])
+    assert.ok(assigned.puzzleId)
+    assert.ok(assigned.prompt)
+    assert.equal(assigned.timeLimitMs, 60_000)
+
+    store.assignDifficulty(alex.id, kira.id, 'HARD')
+    const harder = currentTask(store, kira.id)
+    assert.equal(harder.gameType, GAME_TYPES[0])
+    assert.equal(harder.difficulty, 'HARD')
+    assert.ok(harder.puzzleId)
+    assert.equal(harder.timeLimitMs, 40_000)
+  })
+
+  it('awards score on a correct answer and rejects a second submit', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    store.advancePhase()
+    store.startTask(kira.id)
+    assert.equal(completeMinigame(store, kira.id), true)
+    const done = currentTask(store, kira.id)
+    assert.equal(done.status, 'COMPLETED')
+    assert.equal(done.score, 100)
+    assert.throws(() => completeMinigame(store, kira.id), /уже нельзя выполнить/)
+    assert.equal(currentTask(store, kira.id).score, 100)
+  })
+
+  it('keeps the task open after a wrong answer', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
+    store.advancePhase()
+    store.startTask(kira.id)
+    const task = currentTask(store, kira.id)
+    assert.equal(store.submitAnswer(kira.id, task.id, 'НЕТ'), false)
+    const again = currentTask(store, kira.id)
+    assert.equal(again.status, 'IN_PROGRESS')
+    assert.equal(again.score, 0)
+    assert.equal(completeMinigame(store, kira.id), true)
+    assert.equal(currentTask(store, kira.id).score, 200)
+  })
+
+  it('fails the task when time runs out and rejects a late correct answer', () => {
+    let now = 1_000_000
+    const store = new GameStore(undefined, { now: () => now })
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'HARD')
+    store.advancePhase()
+    store.startTask(kira.id)
+    const task = currentTask(store, kira.id)
+    const startedAt = task.startedAt
+    assert.ok(startedAt)
+    now += (task.timeLimitMs ?? 40_000) + 1
+    const puzzle = getPuzzle(task.puzzleId ?? '')
+    assert.ok(puzzle)
+    assert.throws(() => store.submitAnswer(kira.id, task.id, puzzle.answer), /Время вышло/)
+    const failed = currentTask(store, kira.id)
+    assert.equal(failed.status, 'FAILED')
+    assert.equal(failed.score, 0)
+    store.expireTask(kira.id, task.id)
+    assert.throws(() => store.submitAnswer(kira.id, task.id, puzzle.answer), /уже нельзя выполнить/)
+  })
+
+  it('rejects another player submitting someone else\'s task', () => {
+    const store = new GameStore()
+    const { alex, masha } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    store.advancePhase()
+    store.startTask(kira.id)
+    const task = currentTask(store, kira.id)
+    const puzzle = getPuzzle(task.puzzleId ?? '')
+    assert.ok(puzzle)
+    assert.throws(() => store.submitAnswer(masha.id, task.id, puzzle.answer), /не твоя задача/)
+    assert.equal(currentTask(store, kira.id).status, 'IN_PROGRESS')
+  })
+
+  it('restores startedAt so the remaining time can be computed', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    store.advancePhase()
+    store.startTask(kira.id)
+    const snapshot = store.getState()
+    const live = currentTask(store, kira.id)
+    const restored = GameStore.fromSnapshot(snapshot)
+    const task = restored.getState().tasks.find((item) => item.id === live.id)!
+    assert.equal(task.status, 'IN_PROGRESS')
+    assert.equal(task.startedAt, live.startedAt)
+    assert.equal(task.timeLimitMs, live.timeLimitMs)
+    assert.equal(task.gameType, live.gameType)
+    assert.ok(task.prompt)
+  })
+
+  it('still lets non-development players complete without a minigame', () => {
+    const store = new GameStore()
+    const { masha } = seedFourLeads(store)
+    store.startGame()
+    store.advancePhase()
+    store.startTask(masha.id)
+    store.completeTask(masha.id)
+    const done = currentTask(store, masha.id)
+    assert.equal(done.status, 'COMPLETED')
+    assert.equal(done.score, 100)
+    assert.equal(done.gameType, null)
+  })
+
+  it('rejects completeTask for a development minigame', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    store.advancePhase()
+    store.startTask(kira.id)
+    assert.throws(() => store.completeTask(kira.id), /мини-игру/)
+  })
+
+  it('does not pick the same puzzle twice for one player if another remains', () => {
+    const store = new GameStore(undefined, { randomInt: () => 0 })
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    const firstId = currentTask(store, kira.id).puzzleId
+    store.advancePhase()
+    store.advancePhase()
+    store.assignDifficulty(alex.id, kira.id, 'EASY')
+    const secondId = currentTask(store, kira.id).puzzleId
+    assert.ok(firstId)
+    assert.ok(secondId)
+    assert.notEqual(secondId, firstId)
   })
 })
