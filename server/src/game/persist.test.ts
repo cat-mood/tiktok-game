@@ -31,6 +31,19 @@ describe('Persist', () => {
     assert.equal(loaded?.players[0].name, 'Алекс')
   })
 
+  it('overwrites an existing snapshot', async () => {
+    const dir = await tempDataDir()
+    const persist = new Persist(dir)
+    const store = new GameStore()
+    store.join('Алекс', 'development')
+    await persist.save(store.getState())
+    store.join('Маша', 'design')
+    await persist.save(store.getState())
+    const loaded = await persist.load()
+    assert.equal(loaded?.players.length, 2)
+    assert.equal(loaded?.players[1].name, 'Маша')
+  })
+
   it('archives a session to a dedicated file', async () => {
     const dir = await tempDataDir()
     const persist = new Persist(dir)

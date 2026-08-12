@@ -18,16 +18,32 @@ const ADMIN_CODE = process.env.ADMIN_CODE || 'changeme'
 const DATA_DIR = path.join(repoRoot, 'data')
 const CLIENT_DIST = path.join(repoRoot, 'client/dist')
 
+function isIPv4(adapter: os.NetworkInterfaceInfo): boolean {
+  return adapter.family === 'IPv4' || (adapter.family as unknown as number) === 4
+}
+
+function isUsefulLan(address: string): boolean {
+  if (address.startsWith('169.254.') || address.startsWith('198.18.')) {
+    return false
+  }
+  return (
+    address.startsWith('192.168.') ||
+    address.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(address)
+  )
+}
+
 function lanAddresses(): string[] {
-  const addresses: string[] = []
+  const all: string[] = []
   for (const adapters of Object.values(os.networkInterfaces())) {
     for (const adapter of adapters ?? []) {
-      if (adapter.family === 'IPv4' && !adapter.internal) {
-        addresses.push(adapter.address)
+      if (isIPv4(adapter) && !adapter.internal) {
+        all.push(adapter.address)
       }
     }
   }
-  return addresses
+  const lan = all.filter(isUsefulLan)
+  return lan.length > 0 ? lan : all
 }
 
 async function main() {
@@ -74,12 +90,11 @@ async function main() {
     io.close()
     httpServer.close(() => process.exit(0))
   }
-  process.on('SIGINT', () => {
-    void shutdown()
-  })
-  process.on('SIGTERM', () => {
-    void shutdown()
-  })
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) {
+    process.on(signal, () => {
+      void shutdown()
+    })
+  }
 }
 
 main().catch((error) => {

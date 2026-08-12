@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type { GameState } from '@brainrot/shared'
@@ -36,7 +36,12 @@ export class Persist {
     const tmpPath = path.join(this.dataDir, `current.${randomUUID()}.tmp`)
     const payload = `${JSON.stringify(state, null, 2)}\n`
     await writeFile(tmpPath, payload, 'utf8')
-    await rename(tmpPath, this.currentPath)
+    try {
+      await replaceFile(tmpPath, this.currentPath)
+    } catch (error) {
+      await rm(tmpPath, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   async archive(state: GameState): Promise<string> {
@@ -45,4 +50,19 @@ export class Persist {
     await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
     return filePath
   }
+}
+
+async function replaceFile(tmpPath: string, destPath: string): Promise<void> {
+  try {
+    await rename(tmpPath, destPath)
+    return
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== 'EPERM' && code !== 'EEXIST' && code !== 'EACCES') {
+      throw error
+    }
+  }
+
+  await rm(destPath, { force: true })
+  await rename(tmpPath, destPath)
 }
