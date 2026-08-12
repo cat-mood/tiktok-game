@@ -5,10 +5,13 @@ export function formatMmSs(ms: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export function remainingMs(phaseEndsAt: string | null, serverNow?: string, now: number = Date.now()): number {
+export function remainingMs(
+  phaseEndsAt: string | null,
+  clockOffsetMs: number = 0,
+  now: number = Date.now(),
+): number {
   if (!phaseEndsAt) {
     return 0
   }
-  const offset = serverNow ? now - Date.parse(serverNow) : 0
-  return Math.max(0, Date.parse(phaseEndsAt) - (now - offset))
+  return Math.max(0, Date.parse(phaseEndsAt) - now + clockOffsetMs)
 }

@@ -76,7 +76,9 @@ function PlayerPlanning({ me, state }: { me: Player; state: ClientGameState }) {
 function TeamLeadPlanning({ me, state, onError }: Props) {
   const [busy, setBusy] = useState(false)
   const dept = departmentById(me.departmentId)
-  const teammates = state.players.filter((player) => player.departmentId === me.departmentId)
+  const teammates = state.players.filter(
+    (player) => player.departmentId === me.departmentId && player.id !== me.id,
+  )
 
   const assign = async (playerId: string, difficulty: TaskDifficulty) => {
     setBusy(true)
@@ -100,8 +102,16 @@ function TeamLeadPlanning({ me, state, onError }: Props) {
       <p className="mt-2 text-center text-sm text-white/40">
         {dept.emoji} {dept.name} · спринт {state.currentSprint} / {TOTAL_SPRINTS}
       </p>
+      <p className="mt-2 text-center text-sm text-white/35">
+        Себе сложность выбирать не нужно — ты тоже получишь задачу.
+      </p>
 
       <div className="mt-8 space-y-4">
+        {teammates.length === 0 && (
+          <p className="rounded-3xl border border-line bg-panel p-5 text-center text-white/50">
+            В отделе пока только ты. Задачу себе назначать не нужно.
+          </p>
+        )}
         {teammates.map((player) => {
           const task = currentTaskFor(state, player.id)
           const selected = task?.difficulty
@@ -115,9 +125,7 @@ function TeamLeadPlanning({ me, state, onError }: Props) {
             >
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-xl font-medium">
-                    {player.isTeamLead ? `👑 ${player.name}` : player.name}
-                  </div>
+                  <div className="text-xl font-medium">{player.name}</div>
                   <div className="mt-1 text-sm text-white/50">{dept.name}</div>
                 </div>
                 {selected && (

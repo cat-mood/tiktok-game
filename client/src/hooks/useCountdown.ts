@@ -2,20 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { remainingMs } from '../lib/time'
 
 export function useCountdown(phaseEndsAt: string | null, serverNow: string): number {
-  const offsetAt = useRef(serverNow)
+  const offsetRef = useRef(0)
 
   useEffect(() => {
-    offsetAt.current = serverNow
+    if (serverNow) {
+      offsetRef.current = Date.now() - Date.parse(serverNow)
+    }
   }, [serverNow])
 
-  const [ms, setMs] = useState(() => remainingMs(phaseEndsAt, serverNow))
+  const [ms, setMs] = useState(() => remainingMs(phaseEndsAt))
 
   useEffect(() => {
-    const tick = () => setMs(remainingMs(phaseEndsAt, offsetAt.current))
+    const tick = () => setMs(remainingMs(phaseEndsAt, offsetRef.current))
     tick()
     const id = window.setInterval(tick, 250)
     return () => window.clearInterval(id)
-  }, [phaseEndsAt, serverNow])
+  }, [phaseEndsAt])
 
   return ms
 }

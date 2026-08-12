@@ -202,34 +202,38 @@ describe('GameStore sprints', () => {
     store.startGame()
     assert.throws(() => store.assignDifficulty(kira.id, alex.id, 'EASY'), /Только тимлид/)
     assert.throws(() => store.assignDifficulty(masha.id, kira.id, 'EASY'), /своей команде/)
+    assert.throws(() => store.assignDifficulty(alex.id, alex.id, 'EASY'), /не назначает задачу себе/)
   })
 
   it('auto-assigns EASY when planning ends without a difficulty', () => {
     const store = new GameStore()
     const { alex } = seedFourLeads(store)
-    store.join('Кира', 'development')
+    const kira = store.join('Кира', 'development')
     store.startGame()
-    store.assignDifficulty(alex.id, alex.id, 'HARD')
+    store.assignDifficulty(alex.id, kira.id, 'HARD')
     store.advancePhase()
     const state = store.getState()
     assert.equal(state.phase, 'WORK')
     assert.equal(state.autoAssignedCount, 4)
+    const kiraTask = state.tasks.find((task) => task.playerId === kira.id)!
+    assert.equal(kiraTask.difficulty, 'HARD')
     const alexTask = state.tasks.find((task) => task.playerId === alex.id)!
-    assert.equal(alexTask.difficulty, 'HARD')
+    assert.equal(alexTask.difficulty, 'EASY')
     assert.ok(state.tasks.every((task) => task.status === 'ASSIGNED' && task.difficulty))
   })
 
   it('locks difficulty after planning and awards score on complete', () => {
     const store = new GameStore()
     const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
     store.startGame()
-    store.assignDifficulty(alex.id, alex.id, 'HARD')
+    store.assignDifficulty(alex.id, kira.id, 'HARD')
     store.advancePhase()
-    assert.throws(() => store.assignDifficulty(alex.id, alex.id, 'EASY'), /только во время планирования/)
-    store.startTask(alex.id)
-    assert.equal(store.getState().tasks.find((task) => task.playerId === alex.id)?.status, 'IN_PROGRESS')
-    store.completeTask(alex.id)
-    const done = store.getState().tasks.find((task) => task.playerId === alex.id)!
+    assert.throws(() => store.assignDifficulty(alex.id, kira.id, 'EASY'), /только во время планирования/)
+    store.startTask(kira.id)
+    assert.equal(store.getState().tasks.find((task) => task.playerId === kira.id)?.status, 'IN_PROGRESS')
+    store.completeTask(kira.id)
+    const done = store.getState().tasks.find((task) => task.playerId === kira.id)!
     assert.equal(done.status, 'COMPLETED')
     assert.equal(done.score, 300)
   })
@@ -237,21 +241,22 @@ describe('GameStore sprints', () => {
   it('creates new tasks for sprint 2 and keeps old scores', () => {
     const store = new GameStore()
     const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
     store.startGame()
-    store.assignDifficulty(alex.id, alex.id, 'MEDIUM')
+    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
     store.advancePhase()
-    store.startTask(alex.id)
-    store.completeTask(alex.id)
-    const sprint1Id = store.getState().tasks.find((task) => task.playerId === alex.id && task.sprint === 1)!.id
+    store.startTask(kira.id)
+    store.completeTask(kira.id)
+    const sprint1Id = store.getState().tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!.id
     store.advancePhase()
     const state = store.getState()
     assert.equal(state.phase, 'PLANNING')
     assert.equal(state.currentSprint, 2)
-    assert.equal(state.tasks.length, 8)
+    assert.equal(state.tasks.length, 10)
     const oldTask = state.tasks.find((task) => task.id === sprint1Id)!
     assert.equal(oldTask.status, 'COMPLETED')
     assert.equal(oldTask.score, 200)
-    const next = state.tasks.find((task) => task.playerId === alex.id && task.sprint === 2)!
+    const next = state.tasks.find((task) => task.playerId === kira.id && task.sprint === 2)!
     assert.equal(next.status, 'NOT_ASSIGNED')
     assert.notEqual(next.id, sprint1Id)
   })

@@ -229,6 +229,9 @@ export class GameStore {
       throw new GameError('Только тимлид может назначать задачи')
     }
     const target = this.requirePlayer(playerId)
+    if (target.id === lead.id) {
+      throw new GameError('Тимлид не назначает задачу себе')
+    }
     if (target.departmentId !== lead.departmentId) {
       throw new GameError('Можно назначать задачи только своей команде')
     }
