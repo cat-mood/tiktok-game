@@ -6,6 +6,9 @@ export type {
   GameState,
   Identity,
   Player,
+  Task,
+  TaskDifficulty,
+  TaskStatus,
 } from './types.js'
 
 export {
@@ -17,6 +20,15 @@ export {
 } from './departments.js'
 
 export {
+  DEFAULT_PLANNING_MS,
+  DEFAULT_WORK_MS,
+  SCORE_BY_DIFFICULTY,
+  TASK_DIFFICULTIES,
+  TOTAL_SPRINTS,
+  isTaskDifficulty,
+} from './sprints.js'
+
+export {
   CLIENT_EVENTS,
   SERVER_EVENTS,
   type AdminAuthPayload,
@@ -26,4 +38,5 @@ export {
   type PlayerChangeDepartmentPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
+  type TeamLeadAssignDifficultyPayload,
 } from './events.js'

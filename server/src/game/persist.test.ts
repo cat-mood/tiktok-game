@@ -98,4 +98,48 @@ describe('GameRuntime', () => {
     assert.equal(archived.players[0].id, alex.id)
     assert.throws(() => runtime.store.reconnect(alex.id, oldSession), /другая игра/)
   })
+
+  it('catches up expired sprint phases when hydrating from disk', async () => {
+    const dir = await tempDataDir()
+    const first = await GameRuntime.create(dir, { planningMs: 50, workMs: 50 })
+    await first.mutate((store) => {
+      store.fillLobby()
+      store.startGame()
+    })
+    first.stop()
+    await first.flush()
+
+    const persist = new Persist(dir)
+    const snapshot = await persist.load()
+    assert.ok(snapshot)
+    snapshot.phaseEndsAt = new Date(Date.now() - 60_000).toISOString()
+    snapshot.phaseStartedAt = new Date(Date.now() - 120_000).toISOString()
+    await persist.save(snapshot)
+
+    const second = await GameRuntime.create(dir, { planningMs: 50, workMs: 50 })
+    assert.equal(second.store.getState().phase, 'FINISHED')
+    assert.equal(second.store.getState().currentSprint, 3)
+    second.stop()
+  })
+
+  it('keeps remaining sprint time when hydrating a live phase', async () => {
+    const dir = await tempDataDir()
+    const first = await GameRuntime.create(dir, { planningMs: 60_000, workMs: 240_000 })
+    await first.mutate((store) => {
+      store.fillLobby()
+      store.startGame()
+    })
+    const endsAt = first.store.getState().phaseEndsAt
+    first.stop()
+    await first.flush()
+
+    const second = await GameRuntime.create(dir, { planningMs: 60_000, workMs: 240_000 })
+    const restored = second.store.getState()
+    assert.equal(restored.phase, 'PLANNING')
+    assert.equal(restored.currentSprint, 1)
+    assert.equal(restored.phaseEndsAt, endsAt)
+    assert.ok(Date.parse(restored.phaseEndsAt!) > Date.now())
+    assert.ok(second.getClientState().serverNow)
+    second.stop()
+  })
 })

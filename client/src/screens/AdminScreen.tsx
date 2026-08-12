@@ -7,6 +7,7 @@ import {
   type Player,
 } from '@brainrot/shared'
 import { PhaseBadge } from '../components/PhaseBadge'
+import { SprintTimer } from '../components/SprintTimer'
 import { emitAck, socket } from '../socket'
 
 type Props = {
@@ -80,62 +81,11 @@ export function AdminScreen({ state, onError }: Props) {
         />
       )}
 
-      <div className="mt-8 grid grid-cols-1 gap-4 xl:grid-cols-4">
-        {DEPARTMENTS.map((dept) => {
-          const members = state.players.filter((player) => player.departmentId === dept.id)
-          const hasLead = members.some((player) => player.isTeamLead)
-          return (
-            <section key={dept.id} className="rounded-3xl border border-line bg-panel p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="font-display text-2xl">
-                    {dept.emoji} {dept.name}
-                  </h2>
-                  <p className="mt-1 text-sm text-white/50">{dept.description}</p>
-                </div>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-sm">{members.length}</span>
-              </div>
-              {!hasLead && (
-                <p className="mt-3 rounded-xl bg-mag/15 px-3 py-2 text-sm text-mag">
-                  Нет тимлида
-                </p>
-              )}
-              <div className="mt-4 space-y-3">
-                {members.length === 0 && (
-                  <p className="text-white/35">Пусто</p>
-                )}
-                {members.map((player) => (
-                  <AdminPlayerCard
-                    key={player.id}
-                    player={player}
-                    locked={locked || busy}
-                    onLead={() => void run(CLIENT_EVENTS.adminSetTeamLead, { playerId: player.id })}
-                    onMove={(departmentId) =>
-                      void run(CLIENT_EVENTS.adminMovePlayer, {
-                        playerId: player.id,
-                        departmentId,
-                      })
-                    }
-                    onRemove={() => void run(CLIENT_EVENTS.adminRemovePlayer, { playerId: player.id })}
-                  />
-                ))}
-                {state.devTools && (
-                  <button
-                    type="button"
-                    disabled={locked || busy}
-                    onClick={() =>
-                      void run(CLIENT_EVENTS.adminSpawnPlayer, { departmentId: dept.id })
-                    }
-                    className="w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-sm text-white/60 hover:border-cyan/40 hover:text-cyan disabled:opacity-40"
-                  >
-                    + Игрок
-                  </button>
-                )}
-              </div>
-            </section>
-          )
-        })}
-      </div>
+      {state.phase === 'LOBBY' ? (
+        <LobbyRoster state={state} busy={busy} locked={locked} run={run} />
+      ) : (
+        <AdminGameHud state={state} />
+      )}
 
       {confirmNew && (
         <ConfirmModal
@@ -150,6 +100,167 @@ export function AdminScreen({ state, onError }: Props) {
       )}
     </div>
   )
+}
+
+function LobbyRoster({
+  state,
+  busy,
+  locked,
+  run,
+}: {
+  state: ClientGameState
+  busy: boolean
+  locked: boolean
+  run: (event: string, payload?: unknown) => Promise<boolean>
+}) {
+  return (
+    <div className="mt-8 grid grid-cols-1 gap-4 xl:grid-cols-4">
+      {DEPARTMENTS.map((dept) => {
+        const members = state.players.filter((player) => player.departmentId === dept.id)
+        const hasLead = members.some((player) => player.isTeamLead)
+        return (
+          <section key={dept.id} className="rounded-3xl border border-line bg-panel p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="font-display text-2xl">
+                  {dept.emoji} {dept.name}
+                </h2>
+                <p className="mt-1 text-sm text-white/50">{dept.description}</p>
+              </div>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-sm">{members.length}</span>
+            </div>
+            {!hasLead && (
+              <p className="mt-3 rounded-xl bg-mag/15 px-3 py-2 text-sm text-mag">Нет тимлида</p>
+            )}
+            <div className="mt-4 space-y-3">
+              {members.length === 0 && <p className="text-white/35">Пусто</p>}
+              {members.map((player) => (
+                <AdminPlayerCard
+                  key={player.id}
+                  player={player}
+                  locked={locked || busy}
+                  onLead={() => void run(CLIENT_EVENTS.adminSetTeamLead, { playerId: player.id })}
+                  onMove={(departmentId) =>
+                    void run(CLIENT_EVENTS.adminMovePlayer, {
+                      playerId: player.id,
+                      departmentId,
+                    })
+                  }
+                  onRemove={() => void run(CLIENT_EVENTS.adminRemovePlayer, { playerId: player.id })}
+                />
+              ))}
+              {state.devTools && (
+                <button
+                  type="button"
+                  disabled={locked || busy}
+                  onClick={() => void run(CLIENT_EVENTS.adminSpawnPlayer, { departmentId: dept.id })}
+                  className="w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-sm text-white/60 hover:border-cyan/40 hover:text-cyan disabled:opacity-40"
+                >
+                  + Игрок
+                </button>
+              )}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function AdminGameHud({ state }: { state: ClientGameState }) {
+  return (
+    <div className="mt-8">
+      <div className="rounded-3xl border border-line bg-panel px-6 py-8 text-center">
+        {state.phase === 'FINISHED' ? (
+          <>
+            <div className="text-6xl">🎉</div>
+            <h2 className="mt-4 font-display text-5xl">ВСЕ СПРИНТЫ ЗАВЕРШЕНЫ</h2>
+          </>
+        ) : (
+          <>
+            <SprintTimer
+              sprint={state.currentSprint}
+              phase={state.phase}
+              phaseEndsAt={state.phaseEndsAt}
+              serverNow={state.serverNow}
+              size="admin"
+            />
+            <p className="mt-6 font-display text-5xl tracking-[0.12em]">{state.phase}</p>
+            {state.phase === 'PLANNING' && (
+              <>
+                <p className="mt-4 font-display text-3xl">ПЛАНИРОВАНИЕ</p>
+                <p className="mt-2 text-xl text-white/60">Распределите задачи между сотрудниками</p>
+              </>
+            )}
+            {state.phase === 'WORK' && (
+              <>
+                <p className="mt-4 font-display text-3xl">СПРИНТ {state.currentSprint}</p>
+                <p className="mt-2 text-xl text-white/60">До конца спринта</p>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {state.phase === 'WORK' && state.autoAssignedCount > 0 && (
+        <p className="mt-4 rounded-2xl bg-gold/15 px-4 py-3 text-gold">
+          У {state.autoAssignedCount} {playersWord(state.autoAssignedCount)} не была выбрана
+          сложность. Им назначена EASY.
+        </p>
+      )}
+
+      <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
+        {DEPARTMENTS.map((dept) => {
+          const members = state.players.filter((player) => player.departmentId === dept.id)
+          const lead = members.find((player) => player.isTeamLead)
+          const sprintTasks = state.tasks.filter(
+            (task) => task.teamId === dept.id && task.sprint === state.currentSprint,
+          )
+          const assigned = sprintTasks.filter((task) => task.status !== 'NOT_ASSIGNED').length
+          const completed = sprintTasks.filter((task) => task.status === 'COMPLETED').length
+          return (
+            <section key={dept.id} className="rounded-3xl border border-line bg-panel p-5">
+              <h2 className="font-display text-2xl">
+                {dept.emoji} {dept.name}
+              </h2>
+              <p className="mt-3 text-lg text-gold">👑 {lead ? lead.name : 'Нет тимлида'}</p>
+              <p className="mt-2 text-white/70">{memberCountLabel(members.length)}</p>
+              <p className="mt-1 text-white/70">{assignedCountLabel(assigned)}</p>
+              <p className="mt-1 text-white/50">{completedCountLabel(completed)}</p>
+            </section>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function memberCountLabel(count: number): string {
+  return `${count} ${plural(count, 'участник', 'участника', 'участников')}`
+}
+
+function assignedCountLabel(count: number): string {
+  return `${count} ${plural(count, 'задача назначена', 'задачи назначено', 'задач назначено')}`
+}
+
+function completedCountLabel(count: number): string {
+  return `${count} ${plural(count, 'задача выполнена', 'задачи выполнено', 'задач выполнено')}`
+}
+
+function playersWord(count: number): string {
+  return plural(count, 'игрока', 'игроков', 'игроков')
+}
+
+function plural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) {
+    return one
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few
+  }
+  return many
 }
 
 function RestoreBanner({

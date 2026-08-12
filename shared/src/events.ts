@@ -1,9 +1,12 @@
-import type { DepartmentId } from './types.js'
+import type { DepartmentId, TaskDifficulty } from './types.js'
 
 export const CLIENT_EVENTS = {
   playerJoin: 'player:join',
   playerChangeDepartment: 'player:changeDepartment',
   playerReconnect: 'player:reconnect',
+  teamLeadAssignDifficulty: 'teamLead:assignDifficulty',
+  playerStartTask: 'player:startTask',
+  playerCompleteTask: 'player:completeTask',
   adminAuth: 'admin:auth',
   adminSetTeamLead: 'admin:setTeamLead',
   adminMovePlayer: 'admin:movePlayer',
@@ -49,4 +52,9 @@ export type AdminMovePlayerPayload = {
 
 export type AdminSpawnPlayerPayload = {
   departmentId: DepartmentId
+}
+
+export type TeamLeadAssignDifficultyPayload = {
+  playerId: string
+  difficulty: TaskDifficulty
 }

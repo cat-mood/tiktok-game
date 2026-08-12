@@ -3,6 +3,7 @@ import {
   CLIENT_EVENTS,
   SERVER_EVENTS,
   isDepartmentId,
+  isTaskDifficulty,
   type Ack,
   type AdminAuthPayload,
   type AdminMovePlayerPayload,
@@ -11,6 +12,7 @@ import {
   type PlayerChangeDepartmentPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
+  type TeamLeadAssignDifficultyPayload,
 } from '@brainrot/shared'
 import type { GameRuntime } from '../game/runtime.js'
 import { GameError } from '../game/store.js'
@@ -32,6 +34,16 @@ export function registerSocketHandlers(
 
   const broadcast = () => {
     io.emit(SERVER_EVENTS.gameState, runtime.getClientState())
+  }
+
+  runtime.setBroadcaster(broadcast)
+
+  const requirePlayerId = (socket: Socket): string => {
+    const playerId = (socket.data as SocketData).playerId
+    if (!playerId) {
+      throw new GameError('Сначала присоединись к игре')
+    }
+    return playerId
   }
 
   const ok = (playerId?: string): Ack =>
@@ -165,6 +177,47 @@ export function registerSocketHandlers(
         }
       },
     )
+
+    socket.on(
+      CLIENT_EVENTS.teamLeadAssignDifficulty,
+      async (payload: TeamLeadAssignDifficultyPayload, ack?: (res: Ack) => void) => {
+        try {
+          const leadId = requirePlayerId(socket)
+          if (!payload?.playerId || !isTaskDifficulty(payload.difficulty)) {
+            throw new GameError('Выбери сложность')
+          }
+          await runtime.mutate((store) =>
+            store.assignDifficulty(leadId, payload.playerId, payload.difficulty),
+          )
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(CLIENT_EVENTS.playerStartTask, async (_payload, ack?: (res: Ack) => void) => {
+      try {
+        const playerId = requirePlayerId(socket)
+        await runtime.mutate((store) => store.startTask(playerId))
+        broadcast()
+        ack?.(ok())
+      } catch (error) {
+        ack?.(fail(error))
+      }
+    })
+
+    socket.on(CLIENT_EVENTS.playerCompleteTask, async (_payload, ack?: (res: Ack) => void) => {
+      try {
+        const playerId = requirePlayerId(socket)
+        await runtime.mutate((store) => store.completeTask(playerId))
+        broadcast()
+        ack?.(ok())
+      } catch (error) {
+        ack?.(fail(error))
+      }
+    })
 
     socket.on(
       CLIENT_EVENTS.adminAuth,

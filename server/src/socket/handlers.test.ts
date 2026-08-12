@@ -82,6 +82,7 @@ describe('socket lobby flow', () => {
       client.close()
     }
     io.close()
+    runtime.stop()
     await new Promise<void>((resolve) => httpServer.close(() => resolve()))
     await runtime.flush()
     await rm(dataDir, { recursive: true, force: true })
@@ -202,8 +203,10 @@ describe('socket lobby flow', () => {
     )
 
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminStartGame)).ok, true)
-    const running = await alex.state.wait((s) => s.phase === 'RUNNING')
-    assert.equal(running.phase, 'RUNNING')
+    const running = await alex.state.wait((s) => s.phase === 'PLANNING')
+    assert.equal(running.phase, 'PLANNING')
+    assert.equal(running.currentSprint, 1)
+    assert.equal(running.tasks.length, 5)
     assert.equal(
       (
         await emitAck(alex.client, CLIENT_EVENTS.playerChangeDepartment, {
@@ -248,6 +251,7 @@ describe('socket spawn in dev', () => {
       client.close()
     }
     io.close()
+    runtime.stop()
     await new Promise<void>((resolve) => httpServer.close(() => resolve()))
     await runtime.flush()
     await rm(dataDir, { recursive: true, force: true })
@@ -274,5 +278,143 @@ describe('socket spawn in dev', () => {
     )
     const extra = await state.wait((s) => s.players.length === 5)
     assert.equal(extra.players.filter((p) => p.departmentId === 'qa').length, 2)
+  })
+})
+
+describe('socket sprint flow', () => {
+  let dataDir = ''
+  let url = ''
+  let io: Server
+  let httpServer: ReturnType<typeof createServer>
+  let runtime: GameRuntime
+  const clients: ClientSocket[] = []
+
+  before(async () => {
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-sprint-'))
+    runtime = await GameRuntime.create(dataDir, {
+      devTools: true,
+      planningMs: 150,
+      workMs: 500,
+    })
+    httpServer = createServer()
+    io = new Server(httpServer, { cors: { origin: true } })
+    registerSocketHandlers(io, runtime, ADMIN_CODE)
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+    const address = httpServer.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('No listen address')
+    }
+    url = `http://127.0.0.1:${address.port}`
+  })
+
+  after(async () => {
+    for (const client of clients) {
+      client.close()
+    }
+    io.close()
+    runtime.stop()
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    await runtime.flush()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  async function connect() {
+    const client = ioc(url, { transports: ['websocket'] })
+    const state = trackState(client)
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+    return { client, state }
+  }
+
+  it('assigns tasks, auto-advances phases, completes work, and restores on reconnect', async () => {
+    const admin = await connect()
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminFillLobby)).ok, true)
+    assert.equal(
+      (await emitAck(admin.client, CLIENT_EVENTS.adminSpawnPlayer, { departmentId: 'development' })).ok,
+      true,
+    )
+    const roster = await admin.state.wait((s) => s.players.length === 5)
+    const lead = roster.players.find((p) => p.departmentId === 'development' && p.isTeamLead)!
+    const kira = roster.players.find((p) => p.departmentId === 'development' && !p.isTeamLead)!
+
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminStartGame)).ok, true)
+    const planning = await admin.state.wait((s) => s.phase === 'PLANNING')
+    assert.equal(planning.currentSprint, 1)
+    assert.ok(planning.serverNow)
+
+    const leadSock = await connect()
+    assert.equal(
+      (
+        await emitAck(leadSock.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: lead.id,
+          sessionId: planning.sessionId,
+        })
+      ).ok,
+      true,
+    )
+    assert.equal(
+      (
+        await emitAck(leadSock.client, CLIENT_EVENTS.teamLeadAssignDifficulty, {
+          playerId: kira.id,
+          difficulty: 'HARD',
+        })
+      ).ok,
+      true,
+    )
+    await admin.state.wait((s) =>
+      s.tasks.some((task) => task.playerId === kira.id && task.difficulty === 'HARD'),
+    )
+
+    const work = await admin.state.wait((s) => s.phase === 'WORK')
+    assert.equal(work.currentSprint, 1)
+    assert.equal(work.autoAssignedCount, 4)
+    const kiraTask = work.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
+    assert.equal(kiraTask.difficulty, 'HARD')
+    assert.equal(kiraTask.status, 'ASSIGNED')
+
+    const kiraSock = await connect()
+    assert.equal(
+      (
+        await emitAck(kiraSock.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: kira.id,
+          sessionId: work.sessionId,
+        })
+      ).ok,
+      true,
+    )
+    assert.equal((await emitAck(kiraSock.client, CLIENT_EVENTS.playerStartTask)).ok, true)
+    assert.equal((await emitAck(kiraSock.client, CLIENT_EVENTS.playerCompleteTask)).ok, true)
+    const completed = await admin.state.wait((s) =>
+      s.tasks.some((task) => task.playerId === kira.id && task.status === 'COMPLETED'),
+    )
+    assert.equal(
+      completed.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)?.score,
+      300,
+    )
+
+    kiraSock.client.close()
+    const again = await connect()
+    assert.equal(
+      (
+        await emitAck(again.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: kira.id,
+          sessionId: work.sessionId,
+        })
+      ).ok,
+      true,
+    )
+    const restored = await again.state.wait((s) => s.phase === 'WORK' || s.phase === 'PLANNING')
+    const restoredTask = restored.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
+    assert.equal(restoredTask.status, 'COMPLETED')
+    assert.equal(restoredTask.score, 300)
+    assert.ok(restored.currentSprint >= 1)
+
+    const sprint2 = await admin.state.wait((s) => s.phase === 'PLANNING' && s.currentSprint === 2)
+    assert.equal(sprint2.tasks.filter((task) => task.sprint === 2).length, 5)
+    assert.equal(
+      sprint2.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)?.status,
+      'COMPLETED',
+    )
   })
 })

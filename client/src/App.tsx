@@ -1,6 +1,6 @@
 import { JoinScreen } from './screens/JoinScreen'
 import { LobbyScreen } from './screens/LobbyScreen'
-import { GameStartingScreen } from './screens/GameStartingScreen'
+import { PlayerGameScreen } from './screens/PlayerGameScreen'
 import { AdminLogin } from './screens/AdminLogin'
 import { AdminScreen, useAdminSession } from './screens/AdminScreen'
 import { useGame } from './hooks/useGame'
@@ -12,12 +12,15 @@ export function App() {
 
 function PlayerApp() {
   const game = useGame()
+  const inGame =
+    game.me &&
+    (game.state.phase === 'PLANNING' || game.state.phase === 'WORK' || game.state.phase === 'FINISHED')
 
   return (
     <div className="grid-overlay min-h-dvh">
       <ConnectionBar connected={game.connected} error={game.error} onDismiss={() => game.setError(null)} />
-      {game.me && game.state.phase === 'RUNNING' ? (
-        <GameStartingScreen me={game.me} />
+      {inGame && game.me ? (
+        <PlayerGameScreen me={game.me} state={game.state} onError={game.setError} />
       ) : game.me ? (
         <LobbyScreen me={game.me} state={game.state} onError={game.setError} />
       ) : (

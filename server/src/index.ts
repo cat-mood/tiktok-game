@@ -5,6 +5,7 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import dotenv from 'dotenv'
+import { DEFAULT_PLANNING_MS, DEFAULT_WORK_MS } from '@brainrot/shared'
 import { GameRuntime } from './game/runtime.js'
 import { registerSocketHandlers } from './socket/handlers.js'
 
@@ -49,6 +50,8 @@ function lanAddresses(): string[] {
 async function main() {
   const runtime = await GameRuntime.create(DATA_DIR, {
     devTools: process.env.DEV_TOOLS === 'true',
+    planningMs: envMs('PLANNING_MS', DEFAULT_PLANNING_MS),
+    workMs: envMs('WORK_MS', DEFAULT_WORK_MS),
   })
   const app = express()
   const httpServer = createServer(app)
@@ -91,6 +94,7 @@ async function main() {
   })
 
   const shutdown = async () => {
+    runtime.stop()
     await runtime.flush()
     io.close()
     httpServer.close(() => process.exit(0))
@@ -100,6 +104,15 @@ async function main() {
       void shutdown()
     })
   }
+}
+
+function envMs(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) {
+    return fallback
+  }
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
 main().catch((error) => {

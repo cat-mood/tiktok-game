@@ -82,7 +82,11 @@ describe('GameStore', () => {
     const store = new GameStore()
     seedFourLeads(store)
     store.startGame()
-    assert.equal(store.getState().phase, 'RUNNING')
+    const state = store.getState()
+    assert.equal(state.phase, 'PLANNING')
+    assert.equal(state.currentSprint, 1)
+    assert.equal(state.tasks.length, 4)
+    assert.ok(state.phaseEndsAt)
   })
 
   it('freezes roster after the game starts', () => {
@@ -173,6 +177,119 @@ describe('GameStore', () => {
       )
     }
     store.startGame()
-    assert.equal(store.getState().phase, 'RUNNING')
+    assert.equal(store.getState().phase, 'PLANNING')
+  })
+})
+
+describe('GameStore sprints', () => {
+  it('lets a team lead assign and change difficulty during planning', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, kira.id, 'HARD')
+    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
+    const task = store.getState().tasks.find((item) => item.playerId === kira.id)!
+    assert.equal(task.difficulty, 'MEDIUM')
+    assert.equal(task.status, 'ASSIGNED')
+    assert.equal(task.score, 0)
+  })
+
+  it('rejects assignment from a non-lead and from another team', () => {
+    const store = new GameStore()
+    const { alex, masha } = seedFourLeads(store)
+    const kira = store.join('Кира', 'development')
+    store.startGame()
+    assert.throws(() => store.assignDifficulty(kira.id, alex.id, 'EASY'), /Только тимлид/)
+    assert.throws(() => store.assignDifficulty(masha.id, kira.id, 'EASY'), /своей команде/)
+  })
+
+  it('auto-assigns EASY when planning ends without a difficulty', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    store.join('Кира', 'development')
+    store.startGame()
+    store.assignDifficulty(alex.id, alex.id, 'HARD')
+    store.advancePhase()
+    const state = store.getState()
+    assert.equal(state.phase, 'WORK')
+    assert.equal(state.autoAssignedCount, 4)
+    const alexTask = state.tasks.find((task) => task.playerId === alex.id)!
+    assert.equal(alexTask.difficulty, 'HARD')
+    assert.ok(state.tasks.every((task) => task.status === 'ASSIGNED' && task.difficulty))
+  })
+
+  it('locks difficulty after planning and awards score on complete', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    store.startGame()
+    store.assignDifficulty(alex.id, alex.id, 'HARD')
+    store.advancePhase()
+    assert.throws(() => store.assignDifficulty(alex.id, alex.id, 'EASY'), /только во время планирования/)
+    store.startTask(alex.id)
+    assert.equal(store.getState().tasks.find((task) => task.playerId === alex.id)?.status, 'IN_PROGRESS')
+    store.completeTask(alex.id)
+    const done = store.getState().tasks.find((task) => task.playerId === alex.id)!
+    assert.equal(done.status, 'COMPLETED')
+    assert.equal(done.score, 300)
+  })
+
+  it('creates new tasks for sprint 2 and keeps old scores', () => {
+    const store = new GameStore()
+    const { alex } = seedFourLeads(store)
+    store.startGame()
+    store.assignDifficulty(alex.id, alex.id, 'MEDIUM')
+    store.advancePhase()
+    store.startTask(alex.id)
+    store.completeTask(alex.id)
+    const sprint1Id = store.getState().tasks.find((task) => task.playerId === alex.id && task.sprint === 1)!.id
+    store.advancePhase()
+    const state = store.getState()
+    assert.equal(state.phase, 'PLANNING')
+    assert.equal(state.currentSprint, 2)
+    assert.equal(state.tasks.length, 8)
+    const oldTask = state.tasks.find((task) => task.id === sprint1Id)!
+    assert.equal(oldTask.status, 'COMPLETED')
+    assert.equal(oldTask.score, 200)
+    const next = state.tasks.find((task) => task.playerId === alex.id && task.sprint === 2)!
+    assert.equal(next.status, 'NOT_ASSIGNED')
+    assert.notEqual(next.id, sprint1Id)
+  })
+
+  it('finishes after the third work phase', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    store.advancePhase()
+    store.advancePhase()
+    store.advancePhase()
+    store.advancePhase()
+    store.advancePhase()
+    store.advancePhase()
+    const state = store.getState()
+    assert.equal(state.phase, 'FINISHED')
+    assert.equal(state.currentSprint, 3)
+    assert.equal(state.phaseEndsAt, null)
+    assert.equal(state.tasks.length, 12)
+  })
+
+  it('normalizes a legacy RUNNING snapshot into a lobby', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    const snapshot = store.getState()
+    const restored = GameStore.fromSnapshot({
+      ...snapshot,
+      phase: 'RUNNING' as never,
+    })
+    assert.equal(restored.getState().phase, 'LOBBY')
+    assert.equal(restored.getState().tasks.length, 0)
+  })
+
+  it('reports a phase as due after phaseEndsAt', () => {
+    const store = new GameStore({ ...new GameStore().getState() }, { planningMs: 1_000, workMs: 1_000 })
+    seedFourLeads(store)
+    store.startGame()
+    assert.equal(store.isPhaseDue(Date.now() - 5_000), false)
+    assert.equal(store.isPhaseDue(Date.parse(store.getState().phaseEndsAt!) + 1), true)
   })
 })

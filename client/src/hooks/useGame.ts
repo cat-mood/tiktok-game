@@ -12,9 +12,15 @@ const emptyState: ClientGameState = {
   sessionId: '',
   updatedAt: '',
   phase: 'LOBBY',
+  currentSprint: 0,
+  phaseStartedAt: null,
+  phaseEndsAt: null,
   players: [],
+  tasks: [],
+  autoAssignedCount: 0,
   restoredFromDisk: false,
   devTools: false,
+  serverNow: '',
 }
 
 export function useGame() {
