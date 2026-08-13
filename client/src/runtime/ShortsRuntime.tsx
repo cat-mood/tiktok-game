@@ -19,13 +19,16 @@ type PhoneFrameProps = {
 export function PhoneFrame({ scale, children, className }: PhoneFrameProps) {
   return (
     <div
-      className={['overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow', className]
+      className={[
+        'relative overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow',
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
       style={{ width: CANVAS_WIDTH * scale, height: CANVAS_HEIGHT * scale }}
     >
       <div
-          className="relative origin-top-left touch-none"
+        className="absolute left-0 top-0 origin-top-left touch-none"
         style={{
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,

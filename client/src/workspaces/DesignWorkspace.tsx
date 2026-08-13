@@ -213,7 +213,7 @@ export function DesignWorkspace({ state, onError, readOnly }: Props) {
 
       {!readOnly && (
         <>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="relative z-10 grid grid-cols-4 gap-2">
             {COMPONENT_TYPES.map((type) => (
               <button
                 key={type}
@@ -227,7 +227,7 @@ export function DesignWorkspace({ state, onError, readOnly }: Props) {
           </div>
 
           {selected && (
-            <section className="rounded-3xl border border-line bg-panel p-4">
+            <section className="relative z-10 rounded-3xl border border-line bg-panel p-4">
               <div className="flex items-center justify-between">
                 <p className="font-display text-xl">{COMPONENT_LABELS[selected.type]}</p>
                 <button
