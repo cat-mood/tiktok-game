@@ -1,5 +1,4 @@
 import {
-  DEFAULT_PLANNING_MS,
   DEFAULT_WORK_MS,
   type ClientGameState,
   type GameState,
@@ -9,7 +8,6 @@ import { GameStore, type GameStoreOptions } from './store.js'
 
 export type GameRuntimeOptions = {
   devTools?: boolean
-  planningMs?: number
   workMs?: number
 }
 
@@ -35,7 +33,6 @@ export class GameRuntime {
     const snapshot = await persist.load()
     const devTools = Boolean(options.devTools)
     const storeOptions: GameStoreOptions = {
-      planningMs: options.planningMs ?? DEFAULT_PLANNING_MS,
       workMs: options.workMs ?? DEFAULT_WORK_MS,
     }
     if (snapshot) {
@@ -117,7 +114,7 @@ export class GameRuntime {
   private armPhaseTimer(): void {
     this.clearPhaseTimer()
     const state = this.store.getState()
-    if (state.phase !== 'PLANNING' && state.phase !== 'WORK') {
+    if (state.phase !== 'WORK') {
       return
     }
     if (!state.phaseEndsAt) {

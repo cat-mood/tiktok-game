@@ -71,9 +71,9 @@ export function JoinScreen({ state, onJoined, onError }: Props) {
     <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 py-8">
       <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan/70">IT Challenge</p>
       <h1 className="mt-3 font-display text-5xl leading-none tracking-tight sm:text-6xl">
-        Брейнрот клипы
+        SHORTS
       </h1>
-      <p className="mt-4 text-lg text-white/60">Собери команду и собери приложение уровня TikTok.</p>
+      <p className="mt-4 text-lg text-white/60">Четыре команды вместе собирают приложение коротких видео.</p>
 
       {gameLocked && (
         <div className="mt-6 rounded-2xl border border-mag/40 bg-mag/10 px-4 py-3 text-mag">
@@ -132,7 +132,7 @@ export function JoinScreen({ state, onJoined, onError }: Props) {
 
       {state.devTools && (
         <a href="/dev" className="mt-8 self-center text-sm text-gold/70">
-          Поиграть в мини-игры
+          Песочница workspace
         </a>
       )}
     </div>

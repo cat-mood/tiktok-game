@@ -24,7 +24,7 @@ function DevApp() {
       <ConnectionBar connected={game.connected} error={game.error} onDismiss={() => game.setError(null)} />
       <DevSandboxScreen
         enabled={game.state.devTools}
-        serverNow={game.state.serverNow}
+        state={game.state}
         onError={game.setError}
       />
     </div>
@@ -35,7 +35,7 @@ function PlayerApp() {
   const game = useGame()
   const inGame =
     game.me &&
-    (game.state.phase === 'PLANNING' || game.state.phase === 'WORK' || game.state.phase === 'FINISHED')
+    (game.state.phase === 'WORK' || game.state.phase === 'RELEASE' || game.state.phase === 'FINISHED')
 
   return (
     <div className="grid-overlay min-h-dvh">

@@ -99,9 +99,9 @@ describe('GameRuntime', () => {
     assert.throws(() => runtime.store.reconnect(alex.id, oldSession), /другая игра/)
   })
 
-  it('catches up expired sprint phases when hydrating from disk', async () => {
+  it('catches up expired WORK into RELEASE when hydrating from disk', async () => {
     const dir = await tempDataDir()
-    const first = await GameRuntime.create(dir, { planningMs: 50, workMs: 50 })
+    const first = await GameRuntime.create(dir, { workMs: 50 })
     await first.mutate((store) => {
       store.fillLobby()
       store.startGame()
@@ -116,15 +116,15 @@ describe('GameRuntime', () => {
     snapshot.phaseStartedAt = new Date(Date.now() - 120_000).toISOString()
     await persist.save(snapshot)
 
-    const second = await GameRuntime.create(dir, { planningMs: 50, workMs: 50 })
-    assert.equal(second.store.getState().phase, 'FINISHED')
-    assert.equal(second.store.getState().currentSprint, 3)
+    const second = await GameRuntime.create(dir, { workMs: 50 })
+    assert.equal(second.store.getState().phase, 'RELEASE')
+    assert.ok(second.store.getState().release)
     second.stop()
   })
 
-  it('keeps remaining sprint time when hydrating a live phase', async () => {
+  it('keeps remaining WORK time when hydrating a live phase', async () => {
     const dir = await tempDataDir()
-    const first = await GameRuntime.create(dir, { planningMs: 60_000, workMs: 240_000 })
+    const first = await GameRuntime.create(dir, { workMs: 240_000 })
     await first.mutate((store) => {
       store.fillLobby()
       store.startGame()
@@ -133,10 +133,9 @@ describe('GameRuntime', () => {
     first.stop()
     await first.flush()
 
-    const second = await GameRuntime.create(dir, { planningMs: 60_000, workMs: 240_000 })
+    const second = await GameRuntime.create(dir, { workMs: 240_000 })
     const restored = second.store.getState()
-    assert.equal(restored.phase, 'PLANNING')
-    assert.equal(restored.currentSprint, 1)
+    assert.equal(restored.phase, 'WORK')
     assert.equal(restored.phaseEndsAt, endsAt)
     assert.ok(Date.parse(restored.phaseEndsAt!) > Date.now())
     assert.ok(second.getClientState().serverNow)

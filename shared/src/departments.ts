@@ -12,25 +12,25 @@ export const DEPARTMENTS: DepartmentInfo[] = [
     id: 'development',
     emoji: '👨‍💻',
     name: 'Development',
-    description: 'Придумываем, как работает приложение',
+    description: 'Собираем, как работает приложение',
   },
   {
     id: 'design',
     emoji: '🎨',
     name: 'Design',
-    description: 'Придумываем, как выглядит приложение',
+    description: 'Собираем интерфейс и состояния',
   },
   {
     id: 'marketing',
     emoji: '📢',
     name: 'Marketing',
-    description: 'Привлекаем пользователей',
+    description: 'Готовим запуск продукта',
   },
   {
     id: 'qa',
     emoji: '🔍',
     name: 'QA',
-    description: 'Ищем ошибки и проверяем приложение',
+    description: 'Проверяем продукт тест-кейсами',
   },
 ]
 

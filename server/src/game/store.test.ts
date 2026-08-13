@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { GAME_TYPES } from '@brainrot/shared'
-import { getPuzzle } from '../minigames/catalog.js'
+import { defaultFlags, type LogicTransition, type TestCase } from '@brainrot/shared'
+import { applyAction, runTest } from './interpreter.js'
 import { GameError, GameStore } from './store.js'
 
 function seedFourLeads(store: GameStore) {
@@ -16,19 +16,11 @@ function seedFourLeads(store: GameStore) {
   return { alex, masha, ivan, petya }
 }
 
-function currentTask(store: GameStore, playerId: string) {
-  const state = store.getState()
-  return state.tasks.find((task) => task.playerId === playerId && task.sprint === state.currentSprint)!
+function defaultStateId(store: GameStore) {
+  return store.getState().project.states[0].id
 }
 
-function completeMinigame(store: GameStore, playerId: string) {
-  const task = currentTask(store, playerId)
-  const puzzle = getPuzzle(task.puzzleId ?? '')
-  assert.ok(puzzle, 'puzzle must be assigned')
-  return store.submitAnswer(playerId, task.id, puzzle.answer)
-}
-
-describe('GameStore', () => {
+describe('GameStore lobby', () => {
   it('joins a player into a department', () => {
     const store = new GameStore()
     const player = store.join('  Алекс  ', 'development')
@@ -92,15 +84,16 @@ describe('GameStore', () => {
     assert.throws(() => store.startGame(), /в Marketing не назначен тимлид/)
   })
 
-  it('starts the game when all four departments have a team lead', () => {
+  it('starts WORK when all four departments have a team lead', () => {
     const store = new GameStore()
     seedFourLeads(store)
-    store.startGame()
+    store.startGame(10 * 60 * 1000)
     const state = store.getState()
-    assert.equal(state.phase, 'PLANNING')
-    assert.equal(state.currentSprint, 1)
-    assert.equal(state.tasks.length, 4)
+    assert.equal(state.phase, 'WORK')
+    assert.equal(state.workDurationMs, 10 * 60 * 1000)
     assert.ok(state.phaseEndsAt)
+    assert.equal(state.project.name, 'SHORTS')
+    assert.equal(state.project.states[0].name, 'DEFAULT')
   })
 
   it('freezes roster after the game starts', () => {
@@ -191,293 +184,251 @@ describe('GameStore', () => {
       )
     }
     store.startGame()
-    assert.equal(store.getState().phase, 'PLANNING')
+    assert.equal(store.getState().phase, 'WORK')
   })
 })
 
-describe('GameStore sprints', () => {
-  it('lets a team lead assign and change difficulty during planning', () => {
-    const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'HARD')
-    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
-    const task = store.getState().tasks.find((item) => item.playerId === kira.id)!
-    assert.equal(task.difficulty, 'MEDIUM')
-    assert.equal(task.status, 'ASSIGNED')
-    assert.equal(task.score, 0)
-  })
-
-  it('rejects assignment from a non-lead and from another team', () => {
-    const store = new GameStore()
-    const { alex, masha } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    assert.throws(() => store.assignDifficulty(kira.id, alex.id, 'EASY'), /Только тимлид/)
-    assert.throws(() => store.assignDifficulty(masha.id, kira.id, 'EASY'), /своей команде/)
-    assert.throws(() => store.assignDifficulty(alex.id, alex.id, 'EASY'), /не назначает задачу себе/)
-  })
-
-  it('auto-assigns EASY when planning ends without a difficulty', () => {
-    const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'HARD')
-    store.advancePhase()
-    const state = store.getState()
-    assert.equal(state.phase, 'WORK')
-    assert.equal(state.autoAssignedCount, 4)
-    const kiraTask = state.tasks.find((task) => task.playerId === kira.id)!
-    assert.equal(kiraTask.difficulty, 'HARD')
-    const alexTask = state.tasks.find((task) => task.playerId === alex.id)!
-    assert.equal(alexTask.difficulty, 'EASY')
-    assert.ok(state.tasks.every((task) => task.status === 'ASSIGNED' && task.difficulty))
-  })
-
-  it('locks difficulty after planning and awards score on complete', () => {
-    const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'HARD')
-    store.advancePhase()
-    assert.throws(() => store.assignDifficulty(alex.id, kira.id, 'EASY'), /только во время планирования/)
-    store.startTask(kira.id)
-    assert.equal(store.getState().tasks.find((task) => task.playerId === kira.id)?.status, 'IN_PROGRESS')
-    completeMinigame(store, kira.id)
-    const done = store.getState().tasks.find((task) => task.playerId === kira.id)!
-    assert.equal(done.status, 'COMPLETED')
-    assert.equal(done.score, 300)
-  })
-
-  it('creates new tasks for sprint 2 and keeps old scores', () => {
-    const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
-    store.advancePhase()
-    store.startTask(kira.id)
-    completeMinigame(store, kira.id)
-    const sprint1Id = store.getState().tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!.id
-    store.advancePhase()
-    const state = store.getState()
-    assert.equal(state.phase, 'PLANNING')
-    assert.equal(state.currentSprint, 2)
-    assert.equal(state.tasks.length, 10)
-    const oldTask = state.tasks.find((task) => task.id === sprint1Id)!
-    assert.equal(oldTask.status, 'COMPLETED')
-    assert.equal(oldTask.score, 200)
-    const next = state.tasks.find((task) => task.playerId === kira.id && task.sprint === 2)!
-    assert.equal(next.status, 'NOT_ASSIGNED')
-    assert.notEqual(next.id, sprint1Id)
-  })
-
-  it('finishes after the third work phase', () => {
+describe('GameStore project and release', () => {
+  it('blocks other departments from editing design', () => {
     const store = new GameStore()
     seedFourLeads(store)
     store.startGame()
-    store.advancePhase()
-    store.advancePhase()
-    store.advancePhase()
-    store.advancePhase()
-    store.advancePhase()
-    store.advancePhase()
-    const state = store.getState()
-    assert.equal(state.phase, 'FINISHED')
-    assert.equal(state.currentSprint, 3)
-    assert.equal(state.phaseEndsAt, null)
-    assert.equal(state.tasks.length, 12)
+    const stateId = defaultStateId(store)
+    assert.throws(
+      () =>
+        store.upsertComponent('development', stateId, {
+          id: 'c1',
+          type: 'LIKE',
+          x: 10,
+          y: 10,
+          w: 48,
+          h: 48,
+          props: {},
+        }),
+      /не ваш отдел/,
+    )
   })
 
-  it('lets admin end the current phase immediately', () => {
+  it('lets design add a component and development add a wrong transition', () => {
     const store = new GameStore()
     seedFourLeads(store)
-    assert.throws(() => store.endPhase(), /нет активного этапа/)
     store.startGame()
-    store.endPhase()
-    assert.equal(store.getState().phase, 'WORK')
-    store.endPhase()
-    assert.equal(store.getState().phase, 'PLANNING')
-    assert.equal(store.getState().currentSprint, 2)
-  })
-
-  it('normalizes a legacy RUNNING snapshot into a lobby', () => {
-    const store = new GameStore()
-    seedFourLeads(store)
-    const snapshot = store.getState()
-    const restored = GameStore.fromSnapshot({
-      ...snapshot,
-      phase: 'RUNNING' as never,
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertComponent('design', fromId, {
+      id: 'like',
+      type: 'LIKE',
+      x: 300,
+      y: 400,
+      w: 52,
+      h: 52,
+      props: { active: false },
     })
-    assert.equal(restored.getState().phase, 'LOBBY')
-    assert.equal(restored.getState().tasks.length, 0)
+    const transition: LogicTransition = {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: fromId,
+      elseStateId: null,
+      condition: null,
+    }
+    store.upsertTransition('development', transition)
+    const project = store.getState().project
+    assert.equal(project.design.layouts[0].components[0].type, 'LIKE')
+    assert.equal(project.logic.transitions[0].toStateId, fromId)
+    assert.notEqual(project.logic.transitions[0].toStateId, liked.id)
   })
 
-  it('reports a phase as due after phaseEndsAt', () => {
-    const store = new GameStore({ ...new GameStore().getState() }, { planningMs: 1_000, workMs: 1_000 })
+  it('runs a QA test against the real logic and can fail', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: fromId,
+      elseStateId: null,
+      condition: null,
+    })
+    const test: TestCase = {
+      id: 'test1',
+      title: 'Лайк',
+      startStateId: fromId,
+      steps: [{ event: 'CLICK_LIKE' }],
+      expectedStateId: liked.id,
+      lastResult: null,
+    }
+    store.upsertTest('qa', test)
+    const result = store.runQaTest('qa', 'test1')
+    assert.equal(result.passed, false)
+    assert.equal(result.actualStateId, fromId)
+    assert.equal(result.expectedStateId, liked.id)
+  })
+
+  it('freezes the project on endWork and launches a runtime snapshot', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: liked.id,
+      elseStateId: null,
+      condition: null,
+    })
+    store.endWork()
+    const frozen = store.getState()
+    assert.equal(frozen.phase, 'RELEASE')
+    assert.ok(frozen.release)
+    assert.equal(frozen.release?.launchedAt, null)
+    assert.throws(
+      () => store.upsertTransition('development', frozen.project.logic.transitions[0]),
+      /закрыто/,
+    )
+    store.launchRelease()
+    const live = store.getState().release!
+    assert.ok(live.launchedAt)
+    assert.equal(live.runtimeStateId, fromId)
+    store.dispatchRuntime('CLICK_LIKE')
+    assert.equal(store.getState().release?.runtimeStateId, liked.id)
+  })
+
+  it('keeps a wrong transition in the released runtime', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    const fromId = defaultStateId(store)
+    store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: fromId,
+      elseStateId: null,
+      condition: null,
+    })
+    store.endWork()
+    store.launchRelease()
+    store.dispatchRuntime('CLICK_LIKE')
+    assert.equal(store.getState().release?.runtimeStateId, fromId)
+  })
+
+  it('reports a WORK phase as due after phaseEndsAt', () => {
+    const store = new GameStore({ ...new GameStore().getState() }, { workMs: 1_000 })
     seedFourLeads(store)
     store.startGame()
     assert.equal(store.isPhaseDue(Date.now() - 5_000), false)
     assert.equal(store.isPhaseDue(Date.parse(store.getState().phaseEndsAt!) + 1), true)
   })
+
+  it('advances from WORK to RELEASE when the timer is due', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    store.advancePhase()
+    assert.equal(store.getState().phase, 'RELEASE')
+    assert.ok(store.getState().release)
+  })
+
+  it('does not invent a design layout when development creates a state', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    const liked = store.createState('development', { name: 'LIKED', screenKey: 'VIDEO' })
+    const layout = store.getState().project.design.layouts.find((item) => item.stateId === liked.id)
+    assert.equal(layout, undefined)
+  })
+
+  it('normalizes a legacy PLANNING snapshot into a lobby', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    const snapshot = store.getState()
+    const restored = GameStore.fromSnapshot({
+      ...snapshot,
+      phase: 'PLANNING' as never,
+    })
+    assert.equal(restored.getState().phase, 'LOBBY')
+  })
 })
 
-describe('GameStore minigames', () => {
-  it('assigns a stable development gameType and a puzzle after difficulty', () => {
-    const store = new GameStore(undefined, { randomInt: () => 0 })
-    const { alex, masha } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    const created = currentTask(store, kira.id)
-    assert.equal(created.gameType, GAME_TYPES[0])
-    assert.equal(created.puzzleId, null)
-    assert.equal(currentTask(store, masha.id).gameType, null)
-
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    const assigned = currentTask(store, kira.id)
-    assert.equal(assigned.gameType, GAME_TYPES[0])
-    assert.ok(assigned.puzzleId)
-    assert.ok(assigned.prompt)
-    assert.equal(assigned.timeLimitMs, 240_000)
-
-    store.assignDifficulty(alex.id, kira.id, 'HARD')
-    const harder = currentTask(store, kira.id)
-    assert.equal(harder.gameType, GAME_TYPES[0])
-    assert.equal(harder.difficulty, 'HARD')
-    assert.ok(harder.puzzleId)
-    assert.equal(harder.timeLimitMs, 240_000)
-  })
-
-  it('awards score on a correct answer and rejects a second submit', () => {
+describe('interpreter', () => {
+  it('applies a matching transition and stays put when none exists', () => {
     const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    store.advancePhase()
-    store.startTask(kira.id)
-    assert.equal(completeMinigame(store, kira.id), true)
-    const done = currentTask(store, kira.id)
-    assert.equal(done.status, 'COMPLETED')
-    assert.equal(done.score, 100)
-    assert.throws(() => completeMinigame(store, kira.id), /уже нельзя выполнить/)
-    assert.equal(currentTask(store, kira.id).score, 100)
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: liked.id,
+      elseStateId: null,
+      condition: null,
+    })
+    const project = store.getState().project
+    assert.equal(applyAction(project, fromId, 'CLICK_LIKE').stateId, liked.id)
+    assert.equal(applyAction(project, fromId, 'CLICK_COMMENT').stateId, fromId)
   })
 
-  it('keeps the task open after a wrong answer', () => {
+  it('does not invent a correct LIKE transition', () => {
     const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'MEDIUM')
-    store.advancePhase()
-    store.startTask(kira.id)
-    const task = currentTask(store, kira.id)
-    assert.equal(store.submitAnswer(kira.id, task.id, 'НЕТ'), false)
-    const again = currentTask(store, kira.id)
-    assert.equal(again.status, 'IN_PROGRESS')
-    assert.equal(again.score, 0)
-    assert.equal(completeMinigame(store, kira.id), true)
-    assert.equal(currentTask(store, kira.id).score, 200)
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: fromId,
+      elseStateId: null,
+      condition: null,
+    })
+    const result = applyAction(store.getState().project, fromId, 'CLICK_LIKE')
+    assert.equal(result.stateId, fromId)
+    assert.notEqual(result.stateId, liked.id)
   })
 
-  it('fails the task when time runs out and rejects a late correct answer', () => {
-    let now = 1_000_000
-    const store = new GameStore(undefined, { now: () => now })
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'HARD')
-    store.advancePhase()
-    store.startTask(kira.id)
-    const task = currentTask(store, kira.id)
-    const startedAt = task.startedAt
-    assert.ok(startedAt)
-    now += (task.timeLimitMs ?? 40_000) + 1
-    const puzzle = getPuzzle(task.puzzleId ?? '')
-    assert.ok(puzzle)
-    assert.throws(() => store.submitAnswer(kira.id, task.id, puzzle.answer), /Время вышло/)
-    const failed = currentTask(store, kira.id)
-    assert.equal(failed.status, 'FAILED')
-    assert.equal(failed.score, 0)
-    store.expireTask(kira.id, task.id)
-    assert.throws(() => store.submitAnswer(kira.id, task.id, puzzle.answer), /уже нельзя выполнить/)
-  })
-
-  it('rejects another player submitting someone else\'s task', () => {
+  it('evaluates a condition without writing code', () => {
     const store = new GameStore()
-    const { alex, masha } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    store.advancePhase()
-    store.startTask(kira.id)
-    const task = currentTask(store, kira.id)
-    const puzzle = getPuzzle(task.puzzleId ?? '')
-    assert.ok(puzzle)
-    assert.throws(() => store.submitAnswer(masha.id, task.id, puzzle.answer), /не твоя задача/)
-    assert.equal(currentTask(store, kira.id).status, 'IN_PROGRESS')
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    store.setStateFlags('development', liked.id, {
+      ...defaultFlags(),
+      'video.isLiked': true,
+    })
+    store.upsertTransition('development', {
+      id: 't1',
+      fromStateId: fromId,
+      event: 'CLICK_LIKE',
+      toStateId: liked.id,
+      elseStateId: fromId,
+      condition: { property: 'video.isLiked', operator: 'eq', value: false },
+    })
+    const project = store.getState().project
+    const first = applyAction(project, fromId, 'CLICK_LIKE', defaultFlags())
+    assert.equal(first.stateId, liked.id)
+    const second = applyAction(project, fromId, 'CLICK_LIKE', first.flags)
+    assert.equal(second.stateId, fromId)
   })
 
-  it('restores startedAt so the remaining time can be computed', () => {
+  it('marks a QA test as failed when actual state differs', () => {
     const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    store.advancePhase()
-    store.startTask(kira.id)
-    const snapshot = store.getState()
-    const live = currentTask(store, kira.id)
-    const restored = GameStore.fromSnapshot(snapshot)
-    const task = restored.getState().tasks.find((item) => item.id === live.id)!
-    assert.equal(task.status, 'IN_PROGRESS')
-    assert.equal(task.startedAt, live.startedAt)
-    assert.equal(task.timeLimitMs, live.timeLimitMs)
-    assert.equal(task.gameType, live.gameType)
-    assert.ok(task.prompt)
-  })
-
-  it('still lets non-development players complete without a minigame', () => {
-    const store = new GameStore()
-    const { masha } = seedFourLeads(store)
-    store.startGame()
-    store.advancePhase()
-    store.startTask(masha.id)
-    store.completeTask(masha.id)
-    const done = currentTask(store, masha.id)
-    assert.equal(done.status, 'COMPLETED')
-    assert.equal(done.score, 100)
-    assert.equal(done.gameType, null)
-  })
-
-  it('rejects completeTask for a development minigame', () => {
-    const store = new GameStore()
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    store.advancePhase()
-    store.startTask(kira.id)
-    assert.throws(() => store.completeTask(kira.id), /мини-игру/)
-  })
-
-  it('does not pick the same puzzle twice for one player if another remains', () => {
-    const store = new GameStore(undefined, { randomInt: () => 0 })
-    const { alex } = seedFourLeads(store)
-    const kira = store.join('Кира', 'development')
-    store.startGame()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    const firstId = currentTask(store, kira.id).puzzleId
-    store.advancePhase()
-    store.advancePhase()
-    store.assignDifficulty(alex.id, kira.id, 'EASY')
-    const secondId = currentTask(store, kira.id).puzzleId
-    assert.ok(firstId)
-    assert.ok(secondId)
-    assert.notEqual(secondId, firstId)
+    const fromId = defaultStateId(store)
+    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const test: TestCase = {
+      id: 't',
+      title: 'like',
+      startStateId: fromId,
+      steps: [{ event: 'CLICK_LIKE' }],
+      expectedStateId: liked.id,
+      lastResult: null,
+    }
+    const result = runTest(store.getState().project, test, 'now')
+    assert.equal(result.passed, false)
+    assert.equal(result.actualStateId, fromId)
   })
 })

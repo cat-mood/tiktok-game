@@ -1,0 +1,54 @@
+{
+  "sessionId": "e4fdc4b4-fb65-47db-ade6-c85b9de37368",
+  "updatedAt": "2026-08-13T18:09:09.586Z",
+  "phase": "LOBBY",
+  "currentSprint": 0,
+  "phaseStartedAt": null,
+  "phaseEndsAt": null,
+  "players": [
+    {
+      "id": "1945fedf-968c-4ea2-888a-a17cefd4a9c1",
+      "name": "67",
+      "departmentId": "development",
+      "isTeamLead": true,
+      "connected": false
+    },
+    {
+      "id": "567e78a5-319b-4675-90b6-08b2e3a08ca8",
+      "name": "45678",
+      "departmentId": "design",
+      "isTeamLead": true,
+      "connected": true
+    },
+    {
+      "id": "3eb63bc5-45c9-4e86-ab77-7c3090bfbd53",
+      "name": "Алекс",
+      "departmentId": "design",
+      "isTeamLead": false,
+      "connected": false
+    },
+    {
+      "id": "bb0451a2-dcbc-46b5-9873-3eba803f1150",
+      "name": "Маша",
+      "departmentId": "marketing",
+      "isTeamLead": false,
+      "connected": false
+    },
+    {
+      "id": "924e89b2-6317-451f-a8c3-28236f9b72f1",
+      "name": "Иван",
+      "departmentId": "qa",
+      "isTeamLead": false,
+      "connected": false
+    },
+    {
+      "id": "d4d251db-50c1-4449-af6a-5b481b354c26",
+      "name": "Петя",
+      "departmentId": "development",
+      "isTeamLead": false,
+      "connected": false
+    }
+  ],
+  "tasks": [],
+  "autoAssignedCount": 0
+}

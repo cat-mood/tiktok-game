@@ -1,12 +1,8 @@
-import type { GameType, MiniGamePrompt } from './minigames.js'
+import type { Project, ReleaseState, TestRun } from './project.js'
 
 export type DepartmentId = 'development' | 'design' | 'marketing' | 'qa'
 
-export type GamePhase = 'LOBBY' | 'PLANNING' | 'WORK' | 'FINISHED'
-
-export type TaskDifficulty = 'EASY' | 'MEDIUM' | 'HARD'
-
-export type TaskStatus = 'NOT_ASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+export type GamePhase = 'LOBBY' | 'WORK' | 'RELEASE' | 'FINISHED'
 
 export type Player = {
   id: string
@@ -16,31 +12,16 @@ export type Player = {
   connected: boolean
 }
 
-export type Task = {
-  id: string
-  playerId: string
-  teamId: DepartmentId
-  sprint: number
-  difficulty: TaskDifficulty | null
-  status: TaskStatus
-  score: number
-  gameType: GameType | null
-  puzzleId: string | null
-  timeLimitMs: number | null
-  startedAt: string | null
-  prompt: MiniGamePrompt | null
-}
-
 export type GameState = {
   sessionId: string
   updatedAt: string
   phase: GamePhase
-  currentSprint: number
   phaseStartedAt: string | null
   phaseEndsAt: string | null
+  workDurationMs: number
   players: Player[]
-  tasks: Task[]
-  autoAssignedCount: number
+  project: Project
+  release: ReleaseState | null
 }
 
 export type ClientGameState = GameState & {
@@ -58,12 +39,6 @@ export type Ack =
   | {
       ok: true
       playerId?: string
-      correct?: boolean
-      sandboxId?: string
-      prompt?: MiniGamePrompt
-      timeLimitMs?: number
-      gameType?: GameType
-      difficulty?: TaskDifficulty
-      revealAnswer?: string
+      testResult?: TestRun
     }
   | { ok: false; error: string }

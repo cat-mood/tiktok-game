@@ -2,13 +2,13 @@ import type { GamePhase } from '@brainrot/shared'
 
 const LABELS: Record<GamePhase, string> = {
   LOBBY: 'LOBBY',
-  PLANNING: 'PLANNING',
   WORK: 'WORK',
+  RELEASE: 'RELEASE',
   FINISHED: 'FINISHED',
 }
 
 export function PhaseBadge({ phase }: { phase: GamePhase }) {
-  const active = phase === 'PLANNING' || phase === 'WORK'
+  const active = phase === 'WORK' || phase === 'RELEASE'
   return (
     <span
       className={[

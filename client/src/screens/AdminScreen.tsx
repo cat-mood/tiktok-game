@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import {
   CLIENT_EVENTS,
   DEPARTMENTS,
-  TOTAL_SPRINTS,
+  WORK_DURATION_OPTIONS_MS,
+  projectStats,
   type ClientGameState,
   type DepartmentId,
   type Player,
 } from '@brainrot/shared'
 import { PhaseBadge } from '../components/PhaseBadge'
-import { SprintTimer } from '../components/SprintTimer'
+import { WorkTimer } from '../components/WorkTimer'
 import { emitAck, socket } from '../socket'
+import { ShortsRuntime } from '../runtime/ShortsRuntime'
+import { MerchMockup } from '../workspaces/MarketingWorkspace'
 
 type Props = {
   state: ClientGameState
@@ -18,11 +21,10 @@ type Props = {
 
 export function AdminScreen({ state, onError }: Props) {
   const [confirmNew, setConfirmNew] = useState(false)
-  const [confirmEndPhase, setConfirmEndPhase] = useState(false)
+  const [confirmEnd, setConfirmEnd] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [workDurationMs, setWorkDurationMs] = useState(state.workDurationMs || 30 * 60 * 1000)
   const locked = state.phase !== 'LOBBY'
-  const canEndPhase = state.phase === 'PLANNING' || state.phase === 'WORK'
-  const endPhase = endPhaseCopy(state)
 
   const run = async (event: string, payload?: unknown) => {
     setBusy(true)
@@ -39,26 +41,61 @@ export function AdminScreen({ state, onError }: Props) {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan/70">Admin</p>
-          <h1 className="mt-1 font-display text-4xl">Управление игрой</h1>
+          <h1 className="mt-1 font-display text-4xl">SHORTS</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <PhaseBadge phase={state.phase} />
-          <button
-            type="button"
-            disabled={busy || locked}
-            onClick={() => void run(CLIENT_EVENTS.adminStartGame)}
-            className="rounded-2xl bg-cyan px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
-          >
-            Начать игру
-          </button>
-          {canEndPhase && (
+          {state.phase === 'LOBBY' && (
+            <>
+              <select
+                value={workDurationMs}
+                onChange={(event) => setWorkDurationMs(Number(event.target.value))}
+                className="rounded-2xl bg-ink px-3 py-3"
+              >
+                {WORK_DURATION_OPTIONS_MS.map((ms) => (
+                  <option key={ms} value={ms}>
+                    {ms / 60000} мин
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={busy || locked}
+                onClick={() => void run(CLIENT_EVENTS.adminStartGame, { workDurationMs })}
+                className="rounded-2xl bg-cyan px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
+              >
+                Начать работу
+              </button>
+            </>
+          )}
+          {state.phase === 'WORK' && (
             <button
               type="button"
               disabled={busy}
-              onClick={() => setConfirmEndPhase(true)}
+              onClick={() => setConfirmEnd(true)}
               className="rounded-2xl bg-gold px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
             >
-              Завершить этап
+              END WORK
+            </button>
+          )}
+          {state.phase === 'RELEASE' && !state.release?.launchedAt && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run(CLIENT_EVENTS.adminRelease)}
+              className="rounded-2xl bg-mag px-6 py-3 text-lg font-bold"
+            >
+              🚀 RELEASE
+            </button>
+          )}
+          {state.phase === 'RELEASE' && state.release?.launchedAt && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run(CLIENT_EVENTS.adminFinish)}
+              className="rounded-2xl border border-white/20 px-5 py-3 font-bold"
+            >
+              Завершить
             </button>
           )}
           <button
@@ -84,15 +121,11 @@ export function AdminScreen({ state, onError }: Props) {
               href="/dev"
               className="rounded-2xl border border-cyan/50 px-5 py-3 text-lg font-bold text-cyan"
             >
-              Песочница мини-игр
+              Песочница
             </a>
           )}
         </div>
       </header>
-
-      {state.devTools && (
-        <p className="mt-4 text-sm uppercase tracking-[0.2em] text-gold/70">Dev: можно спавнить игроков</p>
-      )}
 
       {state.restoredFromDisk && (
         <RestoreBanner
@@ -105,21 +138,27 @@ export function AdminScreen({ state, onError }: Props) {
 
       {state.phase === 'LOBBY' ? (
         <LobbyRoster state={state} busy={busy} locked={locked} run={run} />
+      ) : state.phase === 'RELEASE' || state.phase === 'FINISHED' ? (
+        <ReleaseDashboard
+          state={state}
+          interactive={Boolean(state.release?.launchedAt) && state.phase === 'RELEASE'}
+          onDispatch={(eventName) => void run(CLIENT_EVENTS.runtimeDispatch, { event: eventName })}
+        />
       ) : (
-        <AdminGameHud state={state} />
+        <AdminWorkHud state={state} />
       )}
 
-      {confirmEndPhase && (
+      {confirmEnd && (
         <ConfirmModal
-          title={endPhase.title}
-          body={endPhase.body}
-          confirmLabel="Завершить этап"
+          title="Завершить работу?"
+          body="Редактирование закроется. Затем нажмите RELEASE, чтобы запустить приложение."
+          confirmLabel="END WORK"
           confirmClass="bg-gold text-ink"
-          onCancel={() => setConfirmEndPhase(false)}
+          onCancel={() => setConfirmEnd(false)}
           onConfirm={async () => {
-            const ok = await run(CLIENT_EVENTS.adminEndPhase)
+            const ok = await run(CLIENT_EVENTS.adminEndWork)
             if (ok) {
-              setConfirmEndPhase(false)
+              setConfirmEnd(false)
             }
           }}
         />
@@ -209,66 +248,54 @@ function LobbyRoster({
   )
 }
 
-function AdminGameHud({ state }: { state: ClientGameState }) {
+function AdminWorkHud({ state }: { state: ClientGameState }) {
+  const stats = projectStats(state.project)
   return (
     <div className="mt-8">
       <div className="rounded-3xl border border-line bg-panel px-6 py-8 text-center">
-        {state.phase === 'FINISHED' ? (
-          <>
-            <div className="text-6xl">🎉</div>
-            <h2 className="mt-4 font-display text-5xl">ВСЕ СПРИНТЫ ЗАВЕРШЕНЫ</h2>
-          </>
-        ) : (
-          <>
-            <SprintTimer
-              sprint={state.currentSprint}
-              phase={state.phase}
-              phaseEndsAt={state.phaseEndsAt}
-              serverNow={state.serverNow}
-              size="admin"
-            />
-            <p className="mt-6 font-display text-5xl tracking-[0.12em]">{state.phase}</p>
-            {state.phase === 'PLANNING' && (
-              <>
-                <p className="mt-4 font-display text-3xl">ПЛАНИРОВАНИЕ</p>
-                <p className="mt-2 text-xl text-white/60">Распределите задачи между сотрудниками</p>
-              </>
-            )}
-            {state.phase === 'WORK' && (
-              <>
-                <p className="mt-4 font-display text-3xl">СПРИНТ {state.currentSprint}</p>
-                <p className="mt-2 text-xl text-white/60">До конца спринта</p>
-              </>
-            )}
-          </>
-        )}
+        <WorkTimer
+          phase={state.phase}
+          phaseEndsAt={state.phaseEndsAt}
+          serverNow={state.serverNow}
+          size="admin"
+        />
+        <p className="mt-6 font-display text-5xl tracking-[0.12em]">WORK</p>
+        <p className="mt-2 text-xl text-white/60">Четыре команды собирают SHORTS</p>
       </div>
-
-      {state.phase === 'WORK' && state.autoAssignedCount > 0 && (
-        <p className="mt-4 rounded-2xl bg-gold/15 px-4 py-3 text-gold">
-          У {state.autoAssignedCount} {playersWord(state.autoAssignedCount)} не была выбрана
-          сложность. Им назначена EASY.
-        </p>
-      )}
-
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
         {DEPARTMENTS.map((dept) => {
           const members = state.players.filter((player) => player.departmentId === dept.id)
           const lead = members.find((player) => player.isTeamLead)
-          const sprintTasks = state.tasks.filter(
-            (task) => task.teamId === dept.id && task.sprint === state.currentSprint,
-          )
-          const assigned = sprintTasks.filter((task) => task.status !== 'NOT_ASSIGNED').length
-          const completed = sprintTasks.filter((task) => task.status === 'COMPLETED').length
           return (
             <section key={dept.id} className="rounded-3xl border border-line bg-panel p-5">
               <h2 className="font-display text-2xl">
                 {dept.emoji} {dept.name}
               </h2>
               <p className="mt-3 text-lg text-gold">👑 {lead ? lead.name : 'Нет тимлида'}</p>
-              <p className="mt-2 text-white/70">{memberCountLabel(members.length)}</p>
-              <p className="mt-1 text-white/70">{assignedCountLabel(assigned)}</p>
-              <p className="mt-1 text-white/50">{completedCountLabel(completed)}</p>
+              <p className="mt-2 text-white/70">{members.length} в команде</p>
+              {dept.id === 'design' && (
+                <p className="mt-2 text-white/50">
+                  {stats.screens} screens · {stats.states} states · {stats.components} components
+                </p>
+              )}
+              {dept.id === 'development' && (
+                <p className="mt-2 text-white/50">
+                  {stats.transitions} transitions · {stats.conditions} conditions
+                </p>
+              )}
+              {dept.id === 'qa' && (
+                <p className="mt-2 text-white/50">
+                  {stats.tests} tests · {stats.passed} pass · {stats.failed} fail · {stats.bugs} bugs
+                </p>
+              )}
+              {dept.id === 'marketing' && (
+                <p className="mt-2 text-white/50">
+                  {stats.slogan ? 'слоган · ' : ''}
+                  {stats.hasVideo ? 'видео · ' : ''}
+                  {stats.hasPoster ? 'постер · ' : ''}
+                  {stats.hasMerch ? 'мерч' : 'материалов мало'}
+                </p>
+              )}
             </section>
           )
         })}
@@ -277,32 +304,136 @@ function AdminGameHud({ state }: { state: ClientGameState }) {
   )
 }
 
-function memberCountLabel(count: number): string {
-  return `${count} ${plural(count, 'участник', 'участника', 'участников')}`
+function ReleaseDashboard({
+  state,
+  interactive,
+  onDispatch,
+}: {
+  state: ClientGameState
+  interactive: boolean
+  onDispatch: (event: string) => void
+}) {
+  const snapshot = state.release?.snapshot ?? state.project
+  const stats = projectStats(snapshot)
+  const results = state.release?.testResults ?? snapshot.qa.testCases.map((test) => test.lastResult).filter(Boolean)
+  const passed = results.filter((item) => item?.passed).length
+  const failed = results.filter((item) => item && !item.passed).length
+
+  return (
+    <div className="mt-8">
+      <div className="rounded-3xl border border-line bg-panel px-6 py-8 text-center">
+        <p className="text-sm uppercase tracking-[0.35em] text-cyan/70">🚀 SHORTS — RELEASE</p>
+        <h2 className="mt-3 font-display text-5xl">
+          {state.release?.launchedAt ? 'LIVE APPLICATION' : 'Готово к запуску'}
+        </h2>
+        <div className="mt-8 flex flex-col items-center">
+          <ShortsRuntime
+            project={snapshot}
+            stateId={state.release?.runtimeStateId ?? snapshot.logic.initialStateId}
+            interactive={interactive}
+            onAction={(eventName) => onDispatch(eventName)}
+            scale={0.78}
+          />
+          {interactive && (
+            <button
+              type="button"
+              onClick={() => onDispatch('BACK')}
+              className="mt-4 rounded-2xl bg-white/10 px-6 py-3 font-bold"
+            >
+              BACK
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <StatCard title="DESIGN" lines={[`${stats.screens} screens`, `${stats.states} states`, `${stats.components} components`]} />
+        <StatCard title="DEVELOPMENT" lines={[`${stats.transitions} transitions`, `${stats.conditions} conditions`]} />
+        <StatCard
+          title="QA"
+          lines={[
+            `${stats.tests} tests`,
+            `${passed} passed`,
+            `${failed} failed`,
+            `${stats.bugs} bugs · H${stats.highBugs} M${stats.mediumBugs} L${stats.lowBugs}`,
+          ]}
+        />
+        <StatCard
+          title="MARKETING"
+          lines={[
+            stats.hasVideo ? '🎬 Video' : 'нет видео',
+            stats.hasPoster ? '🎨 Poster' : 'нет постера',
+            stats.hasMerch ? '👕 Merch' : 'нет мерча',
+            stats.slogan || 'нет слогана',
+          ]}
+        />
+      </div>
+
+      <section className="mt-6 rounded-3xl border border-line bg-panel p-5">
+        <h3 className="font-display text-2xl">QA протестировали {stats.tests} сценариев</h3>
+        <div className="mt-4 space-y-2">
+          {snapshot.qa.bugs.map((bug) => (
+            <p key={bug.id} className="text-white/70">
+              🐛 {bug.severity}: {bug.title}
+            </p>
+          ))}
+          {snapshot.qa.bugs.length === 0 && <p className="text-white/40">Багов не завели</p>}
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-line bg-panel p-5">
+        <h3 className="font-display text-2xl">📢 MARKETING</h3>
+        {snapshot.marketing.slogan && (
+          <p className="mt-3 font-display text-3xl text-gold">{snapshot.marketing.slogan}</p>
+        )}
+        {snapshot.marketing.videos.map((video) => (
+          <video key={video.id} src={video.url} controls className="mt-4 w-full max-w-xl rounded-2xl" />
+        ))}
+        {snapshot.marketing.posters.map((poster) => (
+          <div
+            key={poster.id}
+            className="relative mt-4 h-48 max-w-sm overflow-hidden rounded-3xl"
+            style={{ background: poster.background }}
+          >
+            {poster.layers.map((layer) => (
+              <div
+                key={layer.id}
+                className="absolute font-display"
+                style={{ left: layer.x, top: layer.y, fontSize: layer.fontSize, color: layer.color }}
+              >
+                {layer.text}
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className="mt-4 flex flex-wrap gap-4">
+          {snapshot.marketing.merch.map((item) => (
+            <MerchMockup key={item.id} kind={item.kind} text={item.text} color={item.color} />
+          ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          {snapshot.marketing.ideas.map((idea) => (
+            <p key={idea.id} className="text-white/70">
+              {idea.text}
+            </p>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
 }
 
-function assignedCountLabel(count: number): string {
-  return `${count} ${plural(count, 'задача назначена', 'задачи назначено', 'задач назначено')}`
-}
-
-function completedCountLabel(count: number): string {
-  return `${count} ${plural(count, 'задача выполнена', 'задачи выполнено', 'задач выполнено')}`
-}
-
-function playersWord(count: number): string {
-  return plural(count, 'игрока', 'игроков', 'игроков')
-}
-
-function plural(count: number, one: string, few: string, many: string): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) {
-    return one
-  }
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return few
-  }
-  return many
+function StatCard({ title, lines }: { title: string; lines: string[] }) {
+  return (
+    <section className="rounded-3xl border border-line bg-panel p-5">
+      <h3 className="font-display text-2xl">{title}</h3>
+      {lines.map((line) => (
+        <p key={line} className="mt-2 text-white/70">
+          {line}
+        </p>
+      ))}
+    </section>
+  )
 }
 
 function RestoreBanner({
@@ -337,12 +468,7 @@ function RestoreBanner({
         >
           Продолжить
         </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onNewGame}
-          className="rounded-2xl border border-white/20 px-4 py-2"
-        >
+        <button type="button" disabled={busy} onClick={onNewGame} className="rounded-2xl border border-white/20 px-4 py-2">
           Новая игра
         </button>
       </div>
@@ -434,43 +560,16 @@ function ConfirmModal({
         <h2 className="font-display text-3xl">{title}</h2>
         <p className="mt-3 text-white/70">{body}</p>
         <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`flex-1 rounded-2xl py-3 font-bold ${confirmClass}`}
-          >
+          <button type="button" onClick={onConfirm} className={`flex-1 rounded-2xl py-3 font-bold ${confirmClass}`}>
             {confirmLabel}
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 rounded-2xl bg-white/10 py-3"
-          >
+          <button type="button" onClick={onCancel} className="flex-1 rounded-2xl bg-white/10 py-3">
             Отмена
           </button>
         </div>
       </div>
     </div>
   )
-}
-
-function endPhaseCopy(state: ClientGameState): { title: string; body: string } {
-  if (state.phase === 'PLANNING') {
-    return {
-      title: 'Завершить планирование?',
-      body: 'Сразу начнётся WORK. Игрокам без выбранной сложности будет назначена EASY.',
-    }
-  }
-  if (state.phase === 'WORK' && state.currentSprint < TOTAL_SPRINTS) {
-    return {
-      title: `Завершить спринт ${state.currentSprint}?`,
-      body: `Начнётся планирование спринта ${state.currentSprint + 1}. Незавершённые задачи останутся незавершёнными.`,
-    }
-  }
-  return {
-    title: 'Завершить последний спринт?',
-    body: 'Игра перейдёт в FINISHED. Незавершённые задачи останутся незавершёнными.',
-  }
 }
 
 export function useAdminSession(onError: (message: string) => void) {

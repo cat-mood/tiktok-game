@@ -1,0 +1,19 @@
+{
+  "sessionId": "e4fdc4b4-fb65-47db-ade6-c85b9de37368",
+  "updatedAt": "2026-08-13T14:49:42.513Z",
+  "phase": "LOBBY",
+  "currentSprint": 0,
+  "phaseStartedAt": null,
+  "phaseEndsAt": null,
+  "players": [
+    {
+      "id": "1945fedf-968c-4ea2-888a-a17cefd4a9c1",
+      "name": "67",
+      "departmentId": "development",
+      "isTeamLead": true,
+      "connected": false
+    }
+  ],
+  "tasks": [],
+  "autoAssignedCount": 0
+}

@@ -12,7 +12,6 @@ import {
   type Ack,
   type ClientGameState,
 } from '@brainrot/shared'
-import { getPuzzle } from '../minigames/catalog.js'
 import { GameRuntime } from '../game/runtime.js'
 import { registerSocketHandlers } from './handlers.js'
 
@@ -204,10 +203,9 @@ describe('socket lobby flow', () => {
     )
 
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminStartGame)).ok, true)
-    const running = await alex.state.wait((s) => s.phase === 'PLANNING')
-    assert.equal(running.phase, 'PLANNING')
-    assert.equal(running.currentSprint, 1)
-    assert.equal(running.tasks.length, 5)
+    const running = await alex.state.wait((s) => s.phase === 'WORK')
+    assert.equal(running.phase, 'WORK')
+    assert.equal(running.project.name, 'SHORTS')
     assert.equal(
       (
         await emitAck(alex.client, CLIENT_EVENTS.playerChangeDepartment, {
@@ -281,25 +279,30 @@ describe('socket spawn in dev', () => {
     assert.equal(extra.players.filter((p) => p.departmentId === 'qa').length, 2)
   })
 
-  it('lets admin end the current phase', async () => {
+  it('lets admin end work and launch release', async () => {
     const client = ioc(url, { transports: ['websocket'] })
     const state = trackState(client)
     clients.push(client)
     await new Promise<void>((resolve) => client.on('connect', () => resolve()))
 
     assert.equal((await emitAck(client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
-    assert.equal((await emitAck(client, CLIENT_EVENTS.adminStartGame)).ok, true)
-    await state.wait((s) => s.phase === 'PLANNING')
-    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndPhase)).ok, true)
-    const work = await state.wait((s) => s.phase === 'WORK')
-    assert.equal(work.currentSprint, 1)
-    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndPhase)).ok, true)
-    const next = await state.wait((s) => s.phase === 'PLANNING' && s.currentSprint === 2)
-    assert.equal(next.currentSprint, 2)
+    if (runtime.store.getState().phase === 'LOBBY') {
+      assert.equal((await emitAck(client, CLIENT_EVENTS.adminFillLobby)).ok, true)
+    }
+    if (runtime.store.getState().phase === 'LOBBY') {
+      assert.equal((await emitAck(client, CLIENT_EVENTS.adminStartGame)).ok, true)
+    }
+    await state.wait((s) => s.phase === 'WORK')
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndWork)).ok, true)
+    const frozen = await state.wait((s) => s.phase === 'RELEASE')
+    assert.equal(frozen.release?.launchedAt, null)
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminRelease)).ok, true)
+    const live = await state.wait((s) => Boolean(s.release?.launchedAt))
+    assert.ok(live.release?.launchedAt)
   })
 })
 
-describe('socket sprint flow', () => {
+describe('socket project collaboration', () => {
   let dataDir = ''
   let url = ''
   let io: Server
@@ -308,12 +311,8 @@ describe('socket sprint flow', () => {
   const clients: ClientSocket[] = []
 
   before(async () => {
-    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-sprint-'))
-    runtime = await GameRuntime.create(dataDir, {
-      devTools: true,
-      planningMs: 150,
-      workMs: 500,
-    })
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-project-'))
+    runtime = await GameRuntime.create(dataDir, { devTools: true, workMs: 60_000 })
     httpServer = createServer()
     io = new Server(httpServer, { cors: { origin: true } })
     registerSocketHandlers(io, runtime, ADMIN_CODE)
@@ -344,251 +343,125 @@ describe('socket sprint flow', () => {
     return { client, state }
   }
 
-  it('assigns tasks, auto-advances phases, completes work, and restores on reconnect', async () => {
+  it('syncs design and development and runs a real QA test', async () => {
     const admin = await connect()
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminFillLobby)).ok, true)
-    assert.equal(
-      (await emitAck(admin.client, CLIENT_EVENTS.adminSpawnPlayer, { departmentId: 'development' })).ok,
-      true,
-    )
-    const roster = await admin.state.wait((s) => s.players.length === 5)
-    const lead = roster.players.find((p) => p.departmentId === 'development' && p.isTeamLead)!
-    const kira = roster.players.find((p) => p.departmentId === 'development' && !p.isTeamLead)!
-
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminStartGame)).ok, true)
-    const planning = await admin.state.wait((s) => s.phase === 'PLANNING')
-    assert.equal(planning.currentSprint, 1)
-    assert.ok(planning.serverNow)
-
-    const leadSock = await connect()
-    assert.equal(
-      (
-        await emitAck(leadSock.client, CLIENT_EVENTS.playerReconnect, {
-          playerId: lead.id,
-          sessionId: planning.sessionId,
-        })
-      ).ok,
-      true,
-    )
-    assert.equal(
-      (
-        await emitAck(leadSock.client, CLIENT_EVENTS.teamLeadAssignDifficulty, {
-          playerId: kira.id,
-          difficulty: 'HARD',
-        })
-      ).ok,
-      true,
-    )
-    await admin.state.wait((s) =>
-      s.tasks.some((task) => task.playerId === kira.id && task.difficulty === 'HARD'),
-    )
-
     const work = await admin.state.wait((s) => s.phase === 'WORK')
-    assert.equal(work.currentSprint, 1)
-    assert.equal(work.autoAssignedCount, 4)
-    const kiraTask = work.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
-    assert.equal(kiraTask.difficulty, 'HARD')
-    assert.equal(kiraTask.status, 'ASSIGNED')
+    const design = work.players.find((p) => p.departmentId === 'design')!
+    const dev = work.players.find((p) => p.departmentId === 'development')!
+    const qa = work.players.find((p) => p.departmentId === 'qa')!
+    const fromId = work.project.states[0].id
 
-    const kiraSock = await connect()
+    const designSock = await connect()
     assert.equal(
       (
-        await emitAck(kiraSock.client, CLIENT_EVENTS.playerReconnect, {
-          playerId: kira.id,
+        await emitAck(designSock.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: design.id,
           sessionId: work.sessionId,
         })
       ).ok,
       true,
     )
-    assert.equal((await emitAck(kiraSock.client, CLIENT_EVENTS.playerStartTask)).ok, true)
-    const inProgress = await admin.state.wait((s) =>
-      s.tasks.some((task) => task.playerId === kira.id && task.status === 'IN_PROGRESS'),
-    )
-    const kiraLive = inProgress.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
-    const puzzle = getPuzzle(kiraLive.puzzleId ?? '')
-    assert.ok(puzzle)
-    assert.equal(kiraLive.gameType, puzzle.gameType)
-    assert.ok(kiraLive.prompt)
+    const created = await emitAck(designSock.client, CLIENT_EVENTS.projectCreateState, {
+      name: 'LIKED',
+      screenKey: 'VIDEO',
+    })
+    assert.equal(created.ok, true)
+    const withLiked = await admin.state.wait((s) => s.project.states.some((item) => item.name === 'LIKED'))
+    const likedId = withLiked.project.states.find((item) => item.name === 'LIKED')!.id
     assert.equal(
       (
-        await emitAck(kiraSock.client, CLIENT_EVENTS.playerCompleteTask)
+        await emitAck(designSock.client, CLIENT_EVENTS.designUpsertComponent, {
+          stateId: fromId,
+          component: {
+            id: 'like',
+            type: 'LIKE',
+            x: 300,
+            y: 400,
+            w: 52,
+            h: 52,
+            props: { active: false },
+          },
+        })
       ).ok,
-      false,
+      true,
     )
-    const wrong = await emitAck(kiraSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
-      taskId: kiraLive.id,
-      answer: 'НЕТ',
-    })
-    assert.equal(wrong.ok, true)
-    assert.equal(wrong.correct, false)
-    const stolen = await emitAck(leadSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
-      taskId: kiraLive.id,
-      answer: puzzle.answer,
+
+    const devSock = await connect()
+    assert.equal(
+      (
+        await emitAck(devSock.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: dev.id,
+          sessionId: work.sessionId,
+        })
+      ).ok,
+      true,
+    )
+    assert.equal(
+      (
+        await emitAck(devSock.client, CLIENT_EVENTS.logicUpsertTransition, {
+          transition: {
+            id: 't1',
+            fromStateId: fromId,
+            event: 'CLICK_LIKE',
+            toStateId: likedId,
+            elseStateId: null,
+            condition: null,
+          },
+        })
+      ).ok,
+      true,
+    )
+
+    const stolen = await emitAck(designSock.client, CLIENT_EVENTS.logicUpsertTransition, {
+      transition: {
+        id: 't2',
+        fromStateId: fromId,
+        event: 'CLICK_COMMENT',
+        toStateId: likedId,
+        elseStateId: null,
+        condition: null,
+      },
     })
     assert.equal(stolen.ok, false)
-    const stillOpen = runtime.store.getState().tasks.find((task) => task.id === kiraLive.id)!
-    assert.equal(stillOpen.status, 'IN_PROGRESS')
-    const submitted = await emitAck(kiraSock.client, CLIENT_EVENTS.playerSubmitAnswer, {
-      taskId: kiraLive.id,
-      answer: puzzle.answer,
-    })
-    assert.equal(submitted.ok, true)
-    assert.equal(submitted.correct, true)
-    const completed = await admin.state.wait((s) =>
-      s.tasks.some((task) => task.playerId === kira.id && task.status === 'COMPLETED'),
-    )
-    assert.equal(
-      completed.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)?.score,
-      300,
-    )
 
-    kiraSock.client.close()
-    const again = await connect()
+    const qaSock = await connect()
     assert.equal(
       (
-        await emitAck(again.client, CLIENT_EVENTS.playerReconnect, {
-          playerId: kira.id,
+        await emitAck(qaSock.client, CLIENT_EVENTS.playerReconnect, {
+          playerId: qa.id,
           sessionId: work.sessionId,
         })
       ).ok,
       true,
     )
-    const restored = await again.state.wait((s) => s.phase === 'WORK' || s.phase === 'PLANNING')
-    const restoredTask = restored.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)!
-    assert.equal(restoredTask.status, 'COMPLETED')
-    assert.equal(restoredTask.score, 300)
-    assert.ok(restored.currentSprint >= 1)
-
-    const sprint2 = await admin.state.wait((s) => s.phase === 'PLANNING' && s.currentSprint === 2)
-    assert.equal(sprint2.tasks.filter((task) => task.sprint === 2).length, 5)
     assert.equal(
-      sprint2.tasks.find((task) => task.playerId === kira.id && task.sprint === 1)?.status,
-      'COMPLETED',
+      (
+        await emitAck(qaSock.client, CLIENT_EVENTS.qaUpsertTest, {
+          test: {
+            id: 'test1',
+            title: 'Лайк',
+            startStateId: fromId,
+            steps: [{ event: 'CLICK_LIKE' }],
+            expectedStateId: likedId,
+            lastResult: null,
+          },
+        })
+      ).ok,
+      true,
     )
-  })
-})
+    const ran = await emitAck(qaSock.client, CLIENT_EVENTS.qaRunTest, { testId: 'test1' })
+    assert.equal(ran.ok, true)
+    assert.equal(ran.testResult?.passed, true)
 
-describe('socket minigame sandbox', () => {
-  let dataDir = ''
-  let url = ''
-  let io: Server
-  let httpServer: ReturnType<typeof createServer>
-  let runtime: GameRuntime
-  const clients: ClientSocket[] = []
-
-  after(async () => {
-    for (const client of clients) {
-      client.close()
-    }
-    if (io) {
-      io.close()
-    }
-    runtime?.stop()
-    if (httpServer) {
-      await new Promise<void>((resolve) => httpServer.close(() => resolve()))
-    }
-    if (runtime) {
-      await runtime.flush()
-    }
-    if (dataDir) {
-      await rm(dataDir, { recursive: true, force: true })
-    }
-  })
-
-  async function boot(devTools: boolean) {
-    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-sandbox-'))
-    runtime = await GameRuntime.create(dataDir, { devTools })
-    httpServer = createServer()
-    io = new Server(httpServer, { cors: { origin: true } })
-    registerSocketHandlers(io, runtime, ADMIN_CODE)
-    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
-    const address = httpServer.address()
-    if (!address || typeof address === 'string') {
-      throw new Error('No listen address')
-    }
-    url = `http://127.0.0.1:${address.port}`
-  }
-
-  it('lets a client play a sandbox game without changing live tasks', async () => {
-    await boot(true)
-    const client = ioc(url, { transports: ['websocket'] })
-    clients.push(client)
-    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
-
-    const started = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
-      gameType: 'SEQUENCE',
-      difficulty: 'EASY',
-    })
-    assert.equal(started.ok, true)
-    assert.ok(started.sandboxId)
-    assert.ok(started.prompt)
-    assert.equal(runtime.store.getState().tasks.length, 0)
-
-    const wrong = await emitAck(client, CLIENT_EVENTS.devSubmitAnswer, {
-      sandboxId: started.sandboxId,
-      answer: '0',
-    })
-    assert.equal(wrong.ok, true)
-    assert.equal(wrong.correct, false)
-
-    const prompt = started.prompt
-    assert.ok(prompt && prompt.kind === 'SEQUENCE')
-    const fromCatalog = getPuzzle(
-      runtime.store.getState().tasks[0]?.puzzleId ?? '',
-    )
-    assert.equal(fromCatalog, undefined)
-
-    const second = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
-      gameType: 'SPEED_TYPING',
-      difficulty: 'EASY',
-    })
-    assert.equal(second.ok, true)
-    assert.equal(runtime.store.getState().tasks.length, 0)
-  })
-})
-
-describe('socket sandbox requires dev tools', () => {
-  let dataDir = ''
-  let url = ''
-  let io: Server
-  let httpServer: ReturnType<typeof createServer>
-  let runtime: GameRuntime
-  const clients: ClientSocket[] = []
-
-  before(async () => {
-    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-nodev-'))
-    runtime = await GameRuntime.create(dataDir)
-    httpServer = createServer()
-    io = new Server(httpServer, { cors: { origin: true } })
-    registerSocketHandlers(io, runtime, ADMIN_CODE)
-    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
-    const address = httpServer.address()
-    if (!address || typeof address === 'string') {
-      throw new Error('No listen address')
-    }
-    url = `http://127.0.0.1:${address.port}`
-  })
-
-  after(async () => {
-    for (const client of clients) {
-      client.close()
-    }
-    io.close()
-    runtime.stop()
-    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
-    await runtime.flush()
-    await rm(dataDir, { recursive: true, force: true })
-  })
-
-  it('rejects sandbox events when DEV_TOOLS is off', async () => {
-    const client = ioc(url, { transports: ['websocket'] })
-    clients.push(client)
-    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
-    const ack = await emitAck(client, CLIENT_EVENTS.devStartMinigame, {
-      gameType: 'SEQUENCE',
-      difficulty: 'EASY',
-    })
-    assert.equal(ack.ok, false)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminEndWork)).ok, true)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminRelease)).ok, true)
+    const live = await admin.state.wait((s) => Boolean(s.release?.launchedAt))
+    assert.equal(live.release?.runtimeStateId, fromId)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.runtimeDispatch, { event: 'CLICK_LIKE' })).ok, true)
+    const afterLike = await admin.state.wait((s) => s.release?.runtimeStateId === likedId)
+    assert.equal(afterLike.release?.runtimeStateId, likedId)
   })
 })

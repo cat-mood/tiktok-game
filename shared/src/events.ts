@@ -1,28 +1,67 @@
-import type { GameType } from './minigames.js'
-import type { DepartmentId, TaskDifficulty } from './types.js'
+import type { DepartmentId } from './types.js'
+import type {
+  AppState,
+  BugReport,
+  BugSeverity,
+  CampaignIdea,
+  ComponentType,
+  ConditionOperator,
+  ConditionProperty,
+  DesignComponent,
+  LogicEvent,
+  LogicTransition,
+  MarketingVideo,
+  MerchItem,
+  Poster,
+  ScreenKey,
+  TestCase,
+  TestStep,
+  TransitionCondition,
+} from './project.js'
 
 export const CLIENT_EVENTS = {
   playerJoin: 'player:join',
   playerChangeDepartment: 'player:changeDepartment',
   playerReconnect: 'player:reconnect',
-  teamLeadAssignDifficulty: 'teamLead:assignDifficulty',
-  playerStartTask: 'player:startTask',
-  playerCompleteTask: 'player:completeTask',
-  playerSubmitAnswer: 'player:submitAnswer',
-  playerExpireTask: 'player:expireTask',
+  projectCreateState: 'project:createState',
+  projectRenameState: 'project:renameState',
+  projectDeleteState: 'project:deleteState',
+  projectSetStateFlags: 'project:setStateFlags',
+  designSetScreens: 'design:setScreens',
+  designUpsertComponent: 'design:upsertComponent',
+  designDeleteComponent: 'design:deleteComponent',
+  designDuplicateState: 'design:duplicateState',
+  logicUpsertTransition: 'logic:upsertTransition',
+  logicDeleteTransition: 'logic:deleteTransition',
+  logicSetInitialState: 'logic:setInitialState',
+  qaUpsertTest: 'qa:upsertTest',
+  qaDeleteTest: 'qa:deleteTest',
+  qaRunTest: 'qa:runTest',
+  qaUpsertBug: 'qa:upsertBug',
+  qaDeleteBug: 'qa:deleteBug',
+  marketingSetSlogan: 'marketing:setSlogan',
+  marketingUpsertVideo: 'marketing:upsertVideo',
+  marketingDeleteVideo: 'marketing:deleteVideo',
+  marketingUpsertPoster: 'marketing:upsertPoster',
+  marketingDeletePoster: 'marketing:deletePoster',
+  marketingUpsertIdea: 'marketing:upsertIdea',
+  marketingDeleteIdea: 'marketing:deleteIdea',
+  marketingUpsertMerch: 'marketing:upsertMerch',
+  marketingDeleteMerch: 'marketing:deleteMerch',
+  runtimeDispatch: 'runtime:dispatch',
   adminAuth: 'admin:auth',
   adminSetTeamLead: 'admin:setTeamLead',
   adminMovePlayer: 'admin:movePlayer',
   adminRemovePlayer: 'admin:removePlayer',
   adminStartGame: 'admin:startGame',
-  adminEndPhase: 'admin:endPhase',
+  adminEndWork: 'admin:endWork',
+  adminRelease: 'admin:release',
+  adminFinish: 'admin:finish',
   adminNewGame: 'admin:newGame',
   adminDismissRestore: 'admin:dismissRestore',
   adminSpawnPlayer: 'admin:spawnPlayer',
   adminFillLobby: 'admin:fillLobby',
-  devStartMinigame: 'dev:startMinigame',
-  devSubmitAnswer: 'dev:submitAnswer',
-  devExpireMinigame: 'dev:expireMinigame',
+  devOpenWorkspace: 'dev:openWorkspace',
 } as const
 
 export const SERVER_EVENTS = {
@@ -61,30 +100,123 @@ export type AdminSpawnPlayerPayload = {
   departmentId: DepartmentId
 }
 
-export type TeamLeadAssignDifficultyPayload = {
-  playerId: string
-  difficulty: TaskDifficulty
+export type AdminStartGamePayload = {
+  workDurationMs?: number
 }
 
-export type PlayerSubmitAnswerPayload = {
-  taskId: string
-  answer: unknown
+export type CreateStatePayload = {
+  name: string
+  screenKey: ScreenKey
 }
 
-export type PlayerExpireTaskPayload = {
-  taskId: string
+export type RenameStatePayload = {
+  stateId: string
+  name: string
 }
 
-export type DevStartMinigamePayload = {
-  gameType: GameType
-  difficulty: TaskDifficulty
+export type StateIdPayload = {
+  stateId: string
 }
 
-export type DevSubmitAnswerPayload = {
-  sandboxId: string
-  answer: unknown
+export type SetStateFlagsPayload = {
+  stateId: string
+  flags: AppState['flags']
 }
 
-export type DevExpireMinigamePayload = {
-  sandboxId: string
+export type SetScreensPayload = {
+  screens: ScreenKey[]
+}
+
+export type UpsertComponentPayload = {
+  stateId: string
+  component: DesignComponent
+}
+
+export type DeleteComponentPayload = {
+  stateId: string
+  componentId: string
+}
+
+export type DuplicateStatePayload = {
+  stateId: string
+  name: string
+}
+
+export type UpsertTransitionPayload = {
+  transition: LogicTransition
+}
+
+export type TransitionIdPayload = {
+  transitionId: string
+}
+
+export type UpsertTestPayload = {
+  test: TestCase
+}
+
+export type TestIdPayload = {
+  testId: string
+}
+
+export type UpsertBugPayload = {
+  bug: BugReport
+}
+
+export type BugIdPayload = {
+  bugId: string
+}
+
+export type SetSloganPayload = {
+  slogan: string
+}
+
+export type UpsertVideoPayload = {
+  video: MarketingVideo
+}
+
+export type VideoIdPayload = {
+  videoId: string
+}
+
+export type UpsertPosterPayload = {
+  poster: Poster
+}
+
+export type PosterIdPayload = {
+  posterId: string
+}
+
+export type UpsertIdeaPayload = {
+  idea: CampaignIdea
+}
+
+export type IdeaIdPayload = {
+  ideaId: string
+}
+
+export type UpsertMerchPayload = {
+  merch: MerchItem
+}
+
+export type MerchIdPayload = {
+  merchId: string
+}
+
+export type RuntimeDispatchPayload = {
+  event: LogicEvent
+}
+
+export type DevOpenWorkspacePayload = {
+  departmentId: DepartmentId
+}
+
+export type {
+  ComponentType,
+  ConditionOperator,
+  ConditionProperty,
+  BugSeverity,
+  LogicEvent,
+  ScreenKey,
+  TestStep,
+  TransitionCondition,
 }

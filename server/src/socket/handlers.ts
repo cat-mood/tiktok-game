@@ -3,31 +3,51 @@ import {
   CLIENT_EVENTS,
   SERVER_EVENTS,
   isDepartmentId,
-  isTaskDifficulty,
   type Ack,
   type AdminAuthPayload,
   type AdminMovePlayerPayload,
   type AdminPlayerPayload,
   type AdminSpawnPlayerPayload,
-  type DevExpireMinigamePayload,
-  type DevStartMinigamePayload,
-  type DevSubmitAnswerPayload,
+  type AdminStartGamePayload,
+  type BugIdPayload,
+  type CreateStatePayload,
+  type DeleteComponentPayload,
+  type DevOpenWorkspacePayload,
+  type DuplicateStatePayload,
+  type IdeaIdPayload,
+  type MerchIdPayload,
   type PlayerChangeDepartmentPayload,
-  type PlayerExpireTaskPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
-  type PlayerSubmitAnswerPayload,
-  type TeamLeadAssignDifficultyPayload,
+  type PosterIdPayload,
+  type RenameStatePayload,
+  type RuntimeDispatchPayload,
+  type SetScreensPayload,
+  type SetSloganPayload,
+  type SetStateFlagsPayload,
+  type StateIdPayload,
+  type TestIdPayload,
+  type TransitionIdPayload,
+  type UpsertBugPayload,
+  type UpsertComponentPayload,
+  type UpsertIdeaPayload,
+  type UpsertMerchPayload,
+  type UpsertPosterPayload,
+  type UpsertTestPayload,
+  type UpsertTransitionPayload,
+  type UpsertVideoPayload,
+  type VideoIdPayload,
+  type DepartmentId,
 } from '@brainrot/shared'
 import type { GameRuntime } from '../game/runtime.js'
 import { GameError } from '../game/store.js'
-import { MinigameSandbox } from '../minigames/sandbox.js'
 
 const LOBBY_GRACE_MS = 20_000
 
 type SocketData = {
   playerId?: string
   isAdmin?: boolean
+  devDepartment?: DepartmentId
 }
 
 export function registerSocketHandlers(
@@ -37,7 +57,6 @@ export function registerSocketHandlers(
 ): void {
   const playerSockets = new Map<string, Set<string>>()
   const graceTimers = new Map<string, NodeJS.Timeout>()
-  const sandbox = new MinigameSandbox()
 
   const broadcast = () => {
     io.emit(SERVER_EVENTS.gameState, runtime.getClientState())
@@ -53,8 +72,20 @@ export function registerSocketHandlers(
     return playerId
   }
 
-  const ok = (playerId?: string): Ack =>
-    playerId ? { ok: true, playerId } : { ok: true }
+  const actorDepartment = (socket: Socket): DepartmentId => {
+    const data = socket.data as SocketData
+    if (runtime.devTools && data.devDepartment) {
+      return data.devDepartment
+    }
+    const playerId = requirePlayerId(socket)
+    const player = runtime.store.getState().players.find((item) => item.id === playerId)
+    if (!player) {
+      throw new GameError('Игрок не найден')
+    }
+    return player.departmentId
+  }
+
+  const ok = (playerId?: string): Ack => (playerId ? { ok: true, playerId } : { ok: true })
 
   const fail = (error: unknown): Ack => ({
     ok: false,
@@ -186,15 +217,116 @@ export function registerSocketHandlers(
     )
 
     socket.on(
-      CLIENT_EVENTS.teamLeadAssignDifficulty,
-      async (payload: TeamLeadAssignDifficultyPayload, ack?: (res: Ack) => void) => {
+      CLIENT_EVENTS.devOpenWorkspace,
+      (payload: DevOpenWorkspacePayload, ack?: (res: Ack) => void) => {
         try {
-          const leadId = requirePlayerId(socket)
-          if (!payload?.playerId || !isTaskDifficulty(payload.difficulty)) {
-            throw new GameError('Выбери сложность')
+          requireDevTools()
+          if (!payload || !isDepartmentId(payload.departmentId)) {
+            throw new GameError('Выбери отдел')
+          }
+          ;(socket.data as SocketData).devDepartment = payload.departmentId
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.projectCreateState,
+      async (payload: CreateStatePayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.name || !payload.screenKey) {
+            throw new GameError('Нужно название состояния')
+          }
+          await runtime.mutate((store) => store.createState(actor, payload))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.projectRenameState,
+      async (payload: RenameStatePayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId || !payload.name) {
+            throw new GameError('Нужно название')
+          }
+          await runtime.mutate((store) => store.renameState(actor, payload.stateId, payload.name))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.projectDeleteState,
+      async (payload: StateIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId) {
+            throw new GameError('Состояние не выбрано')
+          }
+          await runtime.mutate((store) => store.deleteState(actor, payload.stateId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.projectSetStateFlags,
+      async (payload: SetStateFlagsPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId || !payload.flags) {
+            throw new GameError('Нет флагов')
+          }
+          await runtime.mutate((store) => store.setStateFlags(actor, payload.stateId, payload.flags))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.designSetScreens,
+      async (payload: SetScreensPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.screens) {
+            throw new GameError('Нет экранов')
+          }
+          await runtime.mutate((store) => store.setScreens(actor, payload.screens))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.designUpsertComponent,
+      async (payload: UpsertComponentPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId || !payload.component) {
+            throw new GameError('Нет компонента')
           }
           await runtime.mutate((store) =>
-            store.assignDifficulty(leadId, payload.playerId, payload.difficulty),
+            store.upsertComponent(actor, payload.stateId, payload.component),
           )
           broadcast()
           ack?.(ok())
@@ -204,56 +336,17 @@ export function registerSocketHandlers(
       },
     )
 
-    socket.on(CLIENT_EVENTS.playerStartTask, async (_payload, ack?: (res: Ack) => void) => {
-      try {
-        const playerId = requirePlayerId(socket)
-        await runtime.mutate((store) => store.startTask(playerId))
-        broadcast()
-        ack?.(ok())
-      } catch (error) {
-        ack?.(fail(error))
-      }
-    })
-
-    socket.on(CLIENT_EVENTS.playerCompleteTask, async (_payload, ack?: (res: Ack) => void) => {
-      try {
-        const playerId = requirePlayerId(socket)
-        await runtime.mutate((store) => store.completeTask(playerId))
-        broadcast()
-        ack?.(ok())
-      } catch (error) {
-        ack?.(fail(error))
-      }
-    })
-
     socket.on(
-      CLIENT_EVENTS.playerSubmitAnswer,
-      async (payload: PlayerSubmitAnswerPayload, ack?: (res: Ack) => void) => {
+      CLIENT_EVENTS.designDeleteComponent,
+      async (payload: DeleteComponentPayload, ack?: (res: Ack) => void) => {
         try {
-          const playerId = requirePlayerId(socket)
-          if (!payload?.taskId) {
-            throw new GameError('Задача не найдена')
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId || !payload.componentId) {
+            throw new GameError('Компонент не выбран')
           }
-          const correct = await runtime.mutate((store) =>
-            store.submitAnswer(playerId, payload.taskId, payload.answer),
+          await runtime.mutate((store) =>
+            store.deleteComponent(actor, payload.stateId, payload.componentId),
           )
-          broadcast()
-          ack?.({ ok: true, correct })
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.playerExpireTask,
-      async (payload: PlayerExpireTaskPayload, ack?: (res: Ack) => void) => {
-        try {
-          const playerId = requirePlayerId(socket)
-          if (!payload?.taskId) {
-            throw new GameError('Задача не найдена')
-          }
-          await runtime.mutate((store) => store.expireTask(playerId, payload.taskId))
           broadcast()
           ack?.(ok())
         } catch (error) {
@@ -263,19 +356,16 @@ export function registerSocketHandlers(
     )
 
     socket.on(
-      CLIENT_EVENTS.devStartMinigame,
-      (payload: DevStartMinigamePayload, ack?: (res: Ack) => void) => {
+      CLIENT_EVENTS.designDuplicateState,
+      async (payload: DuplicateStatePayload, ack?: (res: Ack) => void) => {
         try {
-          requireDevTools()
-          const started = sandbox.start(payload?.gameType, payload?.difficulty)
-          ack?.({
-            ok: true,
-            sandboxId: started.sandboxId,
-            prompt: started.prompt,
-            timeLimitMs: started.timeLimitMs,
-            gameType: started.gameType,
-            difficulty: started.difficulty,
-          })
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId || !payload.name) {
+            throw new GameError('Нужно название')
+          }
+          await runtime.mutate((store) => store.duplicateState(actor, payload.stateId, payload.name))
+          broadcast()
+          ack?.(ok())
         } catch (error) {
           ack?.(fail(error))
         }
@@ -283,15 +373,16 @@ export function registerSocketHandlers(
     )
 
     socket.on(
-      CLIENT_EVENTS.devSubmitAnswer,
-      (payload: DevSubmitAnswerPayload, ack?: (res: Ack) => void) => {
+      CLIENT_EVENTS.logicUpsertTransition,
+      async (payload: UpsertTransitionPayload, ack?: (res: Ack) => void) => {
         try {
-          requireDevTools()
-          if (!payload?.sandboxId) {
-            throw new GameError('Игра не найдена')
+          const actor = actorDepartment(socket)
+          if (!payload?.transition) {
+            throw new GameError('Нет перехода')
           }
-          const result = sandbox.submit(payload.sandboxId, payload.answer)
-          ack?.({ ok: true, correct: result.correct, revealAnswer: result.revealAnswer })
+          await runtime.mutate((store) => store.upsertTransition(actor, payload.transition))
+          broadcast()
+          ack?.(ok())
         } catch (error) {
           ack?.(fail(error))
         }
@@ -299,15 +390,285 @@ export function registerSocketHandlers(
     )
 
     socket.on(
-      CLIENT_EVENTS.devExpireMinigame,
-      (payload: DevExpireMinigamePayload, ack?: (res: Ack) => void) => {
+      CLIENT_EVENTS.logicDeleteTransition,
+      async (payload: TransitionIdPayload, ack?: (res: Ack) => void) => {
         try {
-          requireDevTools()
-          if (!payload?.sandboxId) {
-            throw new GameError('Игра не найдена')
+          const actor = actorDepartment(socket)
+          if (!payload?.transitionId) {
+            throw new GameError('Переход не выбран')
           }
-          const result = sandbox.expire(payload.sandboxId)
-          ack?.({ ok: true, revealAnswer: result.revealAnswer })
+          await runtime.mutate((store) => store.deleteTransition(actor, payload.transitionId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.logicSetInitialState,
+      async (payload: StateIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.stateId) {
+            throw new GameError('Состояние не выбрано')
+          }
+          await runtime.mutate((store) => store.setInitialState(actor, payload.stateId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.qaUpsertTest,
+      async (payload: UpsertTestPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.test) {
+            throw new GameError('Нет теста')
+          }
+          await runtime.mutate((store) => store.upsertTest(actor, payload.test))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.qaDeleteTest,
+      async (payload: TestIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.testId) {
+            throw new GameError('Тест не выбран')
+          }
+          await runtime.mutate((store) => store.deleteTest(actor, payload.testId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.qaRunTest,
+      async (payload: TestIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.testId) {
+            throw new GameError('Тест не выбран')
+          }
+          const testResult = await runtime.mutate((store) => store.runQaTest(actor, payload.testId))
+          broadcast()
+          ack?.({ ok: true, testResult })
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.qaUpsertBug,
+      async (payload: UpsertBugPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.bug) {
+            throw new GameError('Нет бага')
+          }
+          await runtime.mutate((store) => store.upsertBug(actor, payload.bug))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.qaDeleteBug,
+      async (payload: BugIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.bugId) {
+            throw new GameError('Баг не выбран')
+          }
+          await runtime.mutate((store) => store.deleteBug(actor, payload.bugId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingSetSlogan,
+      async (payload: SetSloganPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          await runtime.mutate((store) => store.setSlogan(actor, payload?.slogan ?? ''))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingUpsertVideo,
+      async (payload: UpsertVideoPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.video) {
+            throw new GameError('Нет видео')
+          }
+          await runtime.mutate((store) => store.upsertVideo(actor, payload.video))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingDeleteVideo,
+      async (payload: VideoIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.videoId) {
+            throw new GameError('Видео не выбрано')
+          }
+          await runtime.mutate((store) => store.deleteVideo(actor, payload.videoId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingUpsertPoster,
+      async (payload: UpsertPosterPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.poster) {
+            throw new GameError('Нет постера')
+          }
+          await runtime.mutate((store) => store.upsertPoster(actor, payload.poster))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingDeletePoster,
+      async (payload: PosterIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.posterId) {
+            throw new GameError('Постер не выбран')
+          }
+          await runtime.mutate((store) => store.deletePoster(actor, payload.posterId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingUpsertIdea,
+      async (payload: UpsertIdeaPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.idea) {
+            throw new GameError('Нет идеи')
+          }
+          await runtime.mutate((store) => store.upsertIdea(actor, payload.idea))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingDeleteIdea,
+      async (payload: IdeaIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.ideaId) {
+            throw new GameError('Идея не выбрана')
+          }
+          await runtime.mutate((store) => store.deleteIdea(actor, payload.ideaId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingUpsertMerch,
+      async (payload: UpsertMerchPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.merch) {
+            throw new GameError('Нет мерча')
+          }
+          await runtime.mutate((store) => store.upsertMerch(actor, payload.merch))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.marketingDeleteMerch,
+      async (payload: MerchIdPayload, ack?: (res: Ack) => void) => {
+        try {
+          const actor = actorDepartment(socket)
+          if (!payload?.merchId) {
+            throw new GameError('Мерч не выбран')
+          }
+          await runtime.mutate((store) => store.deleteMerch(actor, payload.merchId))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(
+      CLIENT_EVENTS.runtimeDispatch,
+      async (payload: RuntimeDispatchPayload, ack?: (res: Ack) => void) => {
+        try {
+          requireAdmin(socket)
+          if (!payload?.event) {
+            throw new GameError('Нет действия')
+          }
+          await runtime.mutate((store) => store.dispatchRuntime(payload.event))
+          broadcast()
+          ack?.(ok())
         } catch (error) {
           ack?.(fail(error))
         }
@@ -385,10 +746,24 @@ export function registerSocketHandlers(
       },
     )
 
-    socket.on(CLIENT_EVENTS.adminStartGame, async (_payload, ack?: (res: Ack) => void) => {
+    socket.on(
+      CLIENT_EVENTS.adminStartGame,
+      async (payload: AdminStartGamePayload, ack?: (res: Ack) => void) => {
+        try {
+          requireAdmin(socket)
+          await runtime.mutate((store) => store.startGame(payload?.workDurationMs))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
+    socket.on(CLIENT_EVENTS.adminEndWork, async (_payload, ack?: (res: Ack) => void) => {
       try {
         requireAdmin(socket)
-        await runtime.mutate((store) => store.startGame())
+        await runtime.mutate((store) => store.endWork())
         broadcast()
         ack?.(ok())
       } catch (error) {
@@ -396,10 +771,21 @@ export function registerSocketHandlers(
       }
     })
 
-    socket.on(CLIENT_EVENTS.adminEndPhase, async (_payload, ack?: (res: Ack) => void) => {
+    socket.on(CLIENT_EVENTS.adminRelease, async (_payload, ack?: (res: Ack) => void) => {
       try {
         requireAdmin(socket)
-        await runtime.mutate((store) => store.endPhase())
+        await runtime.mutate((store) => store.launchRelease())
+        broadcast()
+        ack?.(ok())
+      } catch (error) {
+        ack?.(fail(error))
+      }
+    })
+
+    socket.on(CLIENT_EVENTS.adminFinish, async (_payload, ack?: (res: Ack) => void) => {
+      try {
+        requireAdmin(socket)
+        await runtime.mutate((store) => store.finish())
         broadcast()
         ack?.(ok())
       } catch (error) {
