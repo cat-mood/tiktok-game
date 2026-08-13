@@ -10,8 +10,24 @@ export const socket: Socket = io({
 
 export function emitAck<T>(event: string, payload?: T): Promise<Ack> {
   return new Promise((resolve) => {
+    let settled = false
+    const done = (ack: Ack) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      resolve(ack)
+    }
+    if (!socket.connected) {
+      done({ ok: false, error: 'Нет связи с сервером' })
+      return
+    }
+    const timer = setTimeout(() => {
+      done({ ok: false, error: 'Сервер не отвечает' })
+    }, 4000)
     socket.emit(event, payload, (ack: Ack) => {
-      resolve(ack ?? { ok: false, error: 'Нет ответа от сервера' })
+      clearTimeout(timer)
+      done(ack ?? { ok: false, error: 'Нет ответа от сервера' })
     })
   })
 }

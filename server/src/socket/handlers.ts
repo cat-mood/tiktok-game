@@ -10,21 +10,16 @@ import {
   type AdminSpawnPlayerPayload,
   type AdminStartGamePayload,
   type BugIdPayload,
-  type CreateStatePayload,
   type DeleteComponentPayload,
   type DevOpenWorkspacePayload,
-  type DuplicateStatePayload,
   type IdeaIdPayload,
   type MerchIdPayload,
   type PlayerChangeDepartmentPayload,
   type PlayerJoinPayload,
   type PlayerReconnectPayload,
   type PosterIdPayload,
-  type RenameStatePayload,
   type RuntimeDispatchPayload,
-  type SetScreensPayload,
   type SetSloganPayload,
-  type SetStateFlagsPayload,
   type StateIdPayload,
   type TestIdPayload,
   type TransitionIdPayload,
@@ -233,91 +228,6 @@ export function registerSocketHandlers(
     )
 
     socket.on(
-      CLIENT_EVENTS.projectCreateState,
-      async (payload: CreateStatePayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.name || !payload.screenKey) {
-            throw new GameError('Нужно название состояния')
-          }
-          await runtime.mutate((store) => store.createState(actor, payload))
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.projectRenameState,
-      async (payload: RenameStatePayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.stateId || !payload.name) {
-            throw new GameError('Нужно название')
-          }
-          await runtime.mutate((store) => store.renameState(actor, payload.stateId, payload.name))
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.projectDeleteState,
-      async (payload: StateIdPayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.stateId) {
-            throw new GameError('Состояние не выбрано')
-          }
-          await runtime.mutate((store) => store.deleteState(actor, payload.stateId))
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.projectSetStateFlags,
-      async (payload: SetStateFlagsPayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.stateId || !payload.flags) {
-            throw new GameError('Нет флагов')
-          }
-          await runtime.mutate((store) => store.setStateFlags(actor, payload.stateId, payload.flags))
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.designSetScreens,
-      async (payload: SetScreensPayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.screens) {
-            throw new GameError('Нет экранов')
-          }
-          await runtime.mutate((store) => store.setScreens(actor, payload.screens))
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
       CLIENT_EVENTS.designUpsertComponent,
       async (payload: UpsertComponentPayload, ack?: (res: Ack) => void) => {
         try {
@@ -347,23 +257,6 @@ export function registerSocketHandlers(
           await runtime.mutate((store) =>
             store.deleteComponent(actor, payload.stateId, payload.componentId),
           )
-          broadcast()
-          ack?.(ok())
-        } catch (error) {
-          ack?.(fail(error))
-        }
-      },
-    )
-
-    socket.on(
-      CLIENT_EVENTS.designDuplicateState,
-      async (payload: DuplicateStatePayload, ack?: (res: Ack) => void) => {
-        try {
-          const actor = actorDepartment(socket)
-          if (!payload?.stateId || !payload.name) {
-            throw new GameError('Нужно название')
-          }
-          await runtime.mutate((store) => store.duplicateState(actor, payload.stateId, payload.name))
           broadcast()
           ack?.(ok())
         } catch (error) {

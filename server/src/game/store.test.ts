@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultFlags, type LogicTransition, type TestCase } from '@brainrot/shared'
+import { defaultFlags, INITIAL_STATE_ID, PRESET_STATES, type LogicTransition, type TestCase } from '@brainrot/shared'
 import { applyAction, runTest } from './interpreter.js'
 import { GameError, GameStore } from './store.js'
 
@@ -17,8 +17,10 @@ function seedFourLeads(store: GameStore) {
 }
 
 function defaultStateId(store: GameStore) {
-  return store.getState().project.states[0].id
+  return store.getState().project.logic.initialStateId ?? INITIAL_STATE_ID
 }
+
+const LIKED_ID = 'video-liked'
 
 describe('GameStore lobby', () => {
   it('joins a player into a department', () => {
@@ -93,7 +95,8 @@ describe('GameStore lobby', () => {
     assert.equal(state.workDurationMs, 10 * 60 * 1000)
     assert.ok(state.phaseEndsAt)
     assert.equal(state.project.name, 'SHORTS')
-    assert.equal(state.project.states[0].name, 'DEFAULT')
+    assert.equal(state.project.states[0].name, 'Клип')
+    assert.equal(state.project.states.length, PRESET_STATES.length)
   })
 
   it('freezes roster after the game starts', () => {
@@ -214,7 +217,7 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     store.upsertComponent('design', fromId, {
       id: 'like',
       type: 'LIKE',
@@ -244,7 +247,7 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -273,7 +276,7 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -304,7 +307,6 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -336,13 +338,43 @@ describe('GameStore project and release', () => {
     assert.ok(store.getState().release)
   })
 
-  it('does not invent a design layout when development creates a state', () => {
+  it('seeds preset states with empty layouts for design', () => {
     const store = new GameStore()
-    seedFourLeads(store)
-    store.startGame()
-    const liked = store.createState('development', { name: 'LIKED', screenKey: 'VIDEO' })
-    const layout = store.getState().project.design.layouts.find((item) => item.stateId === liked.id)
-    assert.equal(layout, undefined)
+    const project = store.getState().project
+    assert.equal(project.states.length, PRESET_STATES.length)
+    assert.equal(project.logic.initialStateId, INITIAL_STATE_ID)
+    for (const state of project.states) {
+      const layout = project.design.layouts.find((item) => item.stateId === state.id)
+      assert.ok(layout)
+      assert.equal(layout?.components.length, 0)
+    }
+  })
+
+  it('maps a legacy DEFAULT state onto the preset catalog', () => {
+    const store = new GameStore()
+    const snapshot = store.getState()
+    const restored = GameStore.fromSnapshot({
+      ...snapshot,
+      project: {
+        ...snapshot.project,
+        states: [{ id: 'old-uuid', name: 'DEFAULT', screenKey: 'VIDEO', flags: defaultFlags() }],
+        design: {
+          screens: ['VIDEO'],
+          layouts: [
+            {
+              stateId: 'old-uuid',
+              components: [{ id: 'like', type: 'LIKE', x: 1, y: 1, w: 48, h: 48, props: {} }],
+            },
+          ],
+        },
+        logic: { initialStateId: 'old-uuid', transitions: [] },
+      },
+    })
+    const project = restored.getState().project
+    assert.equal(project.logic.initialStateId, INITIAL_STATE_ID)
+    const layout = project.design.layouts.find((item) => item.stateId === INITIAL_STATE_ID)
+    assert.equal(layout?.components[0]?.type, 'LIKE')
+    assert.ok(project.states.some((item) => item.id === LIKED_ID))
   })
 
   it('normalizes a legacy PLANNING snapshot into a lobby', () => {
@@ -361,7 +393,7 @@ describe('interpreter', () => {
   it('applies a matching transition and stays put when none exists', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -378,7 +410,7 @@ describe('interpreter', () => {
   it('does not invent a correct LIKE transition', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -395,11 +427,7 @@ describe('interpreter', () => {
   it('evaluates a condition without writing code', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
-    store.setStateFlags('development', liked.id, {
-      ...defaultFlags(),
-      'video.isLiked': true,
-    })
+    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
@@ -418,7 +446,7 @@ describe('interpreter', () => {
   it('marks a QA test as failed when actual state differs', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = store.createState('design', { name: 'LIKED', screenKey: 'VIDEO' })
+    const liked = { id: LIKED_ID }
     const test: TestCase = {
       id: 't',
       title: 'like',

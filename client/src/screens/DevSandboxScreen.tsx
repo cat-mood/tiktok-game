@@ -98,7 +98,7 @@ export function DevSandboxScreen({ enabled, state, onError }: Props) {
 const SANDBOX_STEPS = [
   {
     title: 'Это песочница SHORTS',
-    body: 'Сейчас ты Design. Задача — собрать макет телефона. После подсказок внизу экрана появится панель: нажми Video и Like.',
+    body: 'Сейчас ты Design. Сверху экраны: Клип, Создание видео, Чаты, Сообщение. Рисуй каждый. Свои стейты создавать не нужно.',
   },
   {
     title: 'Потом можно сменить роль',

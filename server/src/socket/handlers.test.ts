@@ -353,6 +353,7 @@ describe('socket project collaboration', () => {
     const dev = work.players.find((p) => p.departmentId === 'development')!
     const qa = work.players.find((p) => p.departmentId === 'qa')!
     const fromId = work.project.states[0].id
+    const likedId = 'video-liked'
 
     const designSock = await connect()
     assert.equal(
@@ -364,13 +365,6 @@ describe('socket project collaboration', () => {
       ).ok,
       true,
     )
-    const created = await emitAck(designSock.client, CLIENT_EVENTS.projectCreateState, {
-      name: 'LIKED',
-      screenKey: 'VIDEO',
-    })
-    assert.equal(created.ok, true)
-    const withLiked = await admin.state.wait((s) => s.project.states.some((item) => item.name === 'LIKED'))
-    const likedId = withLiked.project.states.find((item) => item.name === 'LIKED')!.id
     assert.equal(
       (
         await emitAck(designSock.client, CLIENT_EVENTS.designUpsertComponent, {

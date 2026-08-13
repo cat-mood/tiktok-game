@@ -4,7 +4,7 @@ import {
   CONDITION_PROPERTIES,
   EVENT_LABELS,
   LOGIC_EVENTS,
-  SCREEN_LABELS,
+  presetHint,
   type ClientGameState,
   type LogicEvent,
   type LogicTransition,
@@ -27,8 +27,6 @@ export function DevelopmentWorkspace({ state, onError, readOnly }: Props) {
   const [useCondition, setUseCondition] = useState(false)
   const [property, setProperty] = useState<(typeof CONDITION_PROPERTIES)[number]>('video.isLiked')
   const [equalsFalse, setEqualsFalse] = useState(true)
-  const [newName, setNewName] = useState('')
-  const [newScreen, setNewScreen] = useState(project.states[0]?.screenKey ?? 'VIDEO')
 
   const send = (eventName: (typeof CLIENT_EVENTS)[keyof typeof CLIENT_EVENTS], payload: unknown) =>
     void patch(eventName, payload, onError)
@@ -65,7 +63,7 @@ export function DevelopmentWorkspace({ state, onError, readOnly }: Props) {
         >
           {project.states.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.screenKey} / {item.name}
+              {item.name}
             </option>
           ))}
         </select>
@@ -77,68 +75,15 @@ export function DevelopmentWorkspace({ state, onError, readOnly }: Props) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-display text-2xl">{item.name}</p>
-                <p className="text-sm text-white/50">{SCREEN_LABELS[item.screenKey]}</p>
+                <p className="mt-1 text-sm text-white/55">{presetHint(item.id)}</p>
               </div>
               {project.logic.initialStateId === item.id && (
                 <span className="rounded-full bg-cyan/20 px-2 py-1 text-xs text-cyan">START</span>
               )}
             </div>
-            <div className="mt-3 space-y-1 text-sm">
-              {['video.isLiked', 'comments.isOpen', 'share.isOpen'].map((flag) => (
-                <label key={flag} className="flex items-center justify-between gap-2">
-                  <span className="text-white/60">{flag}</span>
-                  <input
-                    type="checkbox"
-                    disabled={readOnly}
-                    checked={item.flags[flag as keyof typeof item.flags]}
-                    onChange={(change) =>
-                      send(CLIENT_EVENTS.projectSetStateFlags, {
-                        stateId: item.id,
-                        flags: { ...item.flags, [flag]: change.target.checked },
-                      })
-                    }
-                  />
-                </label>
-              ))}
-            </div>
           </article>
         ))}
       </div>
-
-      {!readOnly && (
-        <div className="flex gap-2">
-          <input
-            value={newName}
-            onChange={(eventChange) => setNewName(eventChange.target.value)}
-            placeholder="Новый state"
-            className="flex-1 rounded-2xl border border-line bg-panel px-3 py-3"
-          />
-          <select
-            value={newScreen}
-            onChange={(eventChange) => setNewScreen(eventChange.target.value as typeof newScreen)}
-            className="rounded-2xl bg-ink px-2"
-          >
-            {Object.entries(SCREEN_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => {
-              if (!newName.trim()) {
-                return
-              }
-              send(CLIENT_EVENTS.projectCreateState, { name: newName.trim(), screenKey: newScreen })
-              setNewName('')
-            }}
-            className="rounded-2xl bg-white/10 px-4 font-bold"
-          >
-            +
-          </button>
-        </div>
-      )}
 
       {project.qa.bugs.length > 0 && (
         <section className="space-y-3">
@@ -260,7 +205,7 @@ export function DevelopmentWorkspace({ state, onError, readOnly }: Props) {
 
 function nameOf(project: ClientGameState['project'], id: string) {
   const state = project.states.find((item) => item.id === id)
-  return state ? `${state.screenKey} / ${state.name}` : id
+  return state ? state.name : id
 }
 
 function StateSelect({
@@ -283,7 +228,7 @@ function StateSelect({
       {allowEmpty && <option value="">—</option>}
       {states.map((item) => (
         <option key={item.id} value={item.id}>
-          {item.screenKey} / {item.name}
+          {item.name}
         </option>
       ))}
     </select>
@@ -292,12 +237,12 @@ function StateSelect({
 
 const DEV_STEPS = [
   {
-    title: 'Вы собираете логику',
-    body: 'Код писать не нужно. Вы говорите: из какого состояния, по какому действию, куда перейти.',
+    title: 'Экраны уже придуманы',
+    body: 'Клип, Съёмка, Чаты, Сообщение и остальные экраны уже есть. Твоя задача: связать их переходами.',
   },
   {
     title: 'Пример для лайка',
-    body: 'FROM: DEFAULT. EVENT: CLICK LIKE. TO: LIKED. Если поставить TO обратно в DEFAULT — лайк в финальном приложении не сработает. Это не ошибка игры, а вашей логики.',
+    body: 'FROM: Клип. EVENT: CLICK LIKE. TO: Клип с лайком. Если поставить TO обратно в Клип — лайк в приложении не сработает. Это не ошибка игры, а вашей логики.',
   },
   {
     title: 'Баги от QA',

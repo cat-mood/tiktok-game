@@ -275,7 +275,7 @@ function StateSelect({
     >
       {project.states.map((item) => (
         <option key={item.id} value={item.id}>
-          {item.screenKey} / {item.name}
+          {item.name}
         </option>
       ))}
     </select>
@@ -285,7 +285,7 @@ function StateSelect({
 const QA_STEPS = [
   {
     title: 'Вы проверяете чужую работу',
-    body: 'Правильных ответов нет. Соберите сценарий: с какого состояния начать, какое действие нажать, куда должно прийти приложение.',
+    body: 'Правильных ответов нет. Экраны уже есть: Клип, Чаты, Сообщение, Съёмка. Соберите сценарий: откуда начать, что нажать, куда должно прийти.',
   },
   {
     title: 'RUN TEST — это настоящий запуск',

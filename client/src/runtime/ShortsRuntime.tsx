@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { PointerEvent, ReactNode } from 'react'
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -20,7 +20,7 @@ export function PhoneFrame({ scale, children, className }: PhoneFrameProps) {
   return (
     <div
       className={[
-        'relative z-0 overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow',
+        'relative overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow',
         className,
       ]
         .filter(Boolean)
@@ -28,21 +28,9 @@ export function PhoneFrame({ scale, children, className }: PhoneFrameProps) {
       style={{
         width: CANVAS_WIDTH * scale,
         height: CANVAS_HEIGHT * scale,
-        clipPath: 'inset(0)',
-        isolation: 'isolate',
       }}
     >
-      <div
-        className="touch-none"
-        style={{
-          width: CANVAS_WIDTH,
-          height: CANVAS_HEIGHT,
-          zoom: scale,
-          transformOrigin: 'top left',
-        }}
-      >
-        {children}
-      </div>
+      {children}
     </div>
   )
 }
@@ -52,11 +40,15 @@ export function ComponentView({
   selected,
   interactive,
   onAction,
+  onPointerDown,
+  scale = 1,
 }: {
   component: DesignComponent
   selected?: boolean
   interactive?: boolean
   onAction?: (event: LogicEvent) => void
+  onPointerDown?: (event: PointerEvent<HTMLDivElement>) => void
+  scale?: number
 }) {
   const event = COMPONENT_EVENT_MAP[component.type]
   const clickable = Boolean(interactive && event && onAction)
@@ -65,18 +57,21 @@ export function ComponentView({
     <div
       data-component-id={component.id}
       className={[
-        'absolute flex items-center justify-center overflow-hidden rounded-2xl text-center',
+        'absolute flex items-center justify-center overflow-hidden text-center',
+        component.type === 'RECORD' || component.type === 'SEND' ? 'rounded-full' : 'rounded-2xl',
         selected ? 'ring-2 ring-cyan' : '',
         clickable ? 'cursor-pointer' : '',
       ].join(' ')}
       style={{
-        left: component.x,
-        top: component.y,
-        width: component.w,
-        height: component.h,
+        left: component.x * scale,
+        top: component.y * scale,
+        width: component.w * scale,
+        height: component.h * scale,
         color: component.props.color || '#fff',
         background: backgroundFor(component),
+        fontSize: `${Math.max(10, 16 * scale)}px`,
       }}
+      onPointerDown={onPointerDown}
       onClick={
         clickable
           ? (eventClick) => {
@@ -86,7 +81,7 @@ export function ComponentView({
           : undefined
       }
     >
-      {innerContent(component)}
+      {innerContent(component, scale)}
     </div>
   )
 }
@@ -110,26 +105,38 @@ function backgroundFor(component: DesignComponent): string {
       return 'rgba(18,18,26,0.96)'
     case 'INPUT':
       return 'rgba(255,255,255,0.08)'
+    case 'CAMERA':
+      return 'linear-gradient(180deg, #1a2230 0%, #07070c 100%)'
+    case 'RECORD':
+      return '#ff2d6a'
+    case 'CHAT_ROW':
+      return 'rgba(255,255,255,0.06)'
+    case 'BUBBLE':
+      return component.props.active ? '#00f0ff' : 'rgba(255,255,255,0.12)'
+    case 'SEND':
+      return '#00f0ff'
+    case 'SEARCH':
+      return 'rgba(255,255,255,0.08)'
     default:
       return 'transparent'
   }
 }
 
-function innerContent(component: DesignComponent) {
+function innerContent(component: DesignComponent, scale: number) {
   switch (component.type) {
     case 'VIDEO':
       return (
-        <div className="flex h-full w-full flex-col justify-end p-4 text-left">
-          <div className="text-5xl">▶</div>
-          <p className="mt-2 text-lg font-semibold">{component.props.text || 'Видео'}</p>
+        <div className="flex h-full w-full flex-col justify-center p-4 text-left">
+          <div style={{ fontSize: `${48 * scale}px` }}>▶</div>
+          <p className="mt-2 font-semibold">{component.props.text || 'Видео'}</p>
         </div>
       )
     case 'LIKE':
-      return <span className="text-3xl">{component.props.active ? '❤️' : '🤍'}</span>
+      return <span style={{ fontSize: `${28 * scale}px` }}>{component.props.active ? '❤️' : '🤍'}</span>
     case 'COMMENT':
-      return <span className="text-3xl">💬</span>
+      return <span style={{ fontSize: `${28 * scale}px` }}>💬</span>
     case 'SHARE':
-      return <span className="text-3xl">📤</span>
+      return <span style={{ fontSize: `${28 * scale}px` }}>📤</span>
     case 'AVATAR':
       return (
         <div className="flex h-full w-full items-center justify-center rounded-full bg-mag/40 text-xl">
@@ -138,10 +145,12 @@ function innerContent(component: DesignComponent) {
       )
     case 'NAVIGATION':
       return (
-        <div className="flex w-full justify-around text-xs uppercase tracking-widest text-white/70">
-          <span>Home</span>
-          <span>Video</span>
-          <span>Me</span>
+        <div className="flex w-full justify-around text-[10px] uppercase tracking-widest text-white/70">
+          <span>Лента</span>
+          <span>Клип</span>
+          <span>+</span>
+          <span>Чаты</span>
+          <span>Я</span>
         </div>
       )
     case 'INPUT':
@@ -154,7 +163,7 @@ function innerContent(component: DesignComponent) {
       return component.props.src ? (
         <img src={component.props.src} alt="" className="h-full w-full object-cover" />
       ) : (
-        <span className="text-white/40">IMAGE</span>
+        <span className="text-white/40">Картинка</span>
       )
     case 'MODAL':
       return <p className="px-3 text-lg">{component.props.text || 'Модальное окно'}</p>
@@ -162,6 +171,44 @@ function innerContent(component: DesignComponent) {
       return <span className="text-lg font-bold">{component.props.text || 'Кнопка'}</span>
     case 'TEXT':
       return <span className="px-1 text-lg font-medium">{component.props.text || 'Текст'}</span>
+    case 'CAMERA':
+      return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-white/70">
+          <div style={{ fontSize: `${40 * scale}px` }}>📷</div>
+          <p className="font-semibold text-white">{component.props.text || 'Камера'}</p>
+        </div>
+      )
+    case 'RECORD':
+      return <span style={{ fontSize: `${22 * scale}px` }}>⏺</span>
+    case 'CHAT_ROW':
+      return (
+        <div className="flex h-full w-full items-center gap-3 px-3 text-left">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mag/40">
+            {component.props.text?.[0] || '🙂'}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{component.props.text || 'Маша'}</p>
+            <p className="truncate text-white/45">{component.props.placeholder || 'Привет!'}</p>
+          </div>
+        </div>
+      )
+    case 'BUBBLE':
+      return (
+        <span
+          className="px-3 text-left font-medium"
+          style={{ color: component.props.active ? '#07070c' : '#fff' }}
+        >
+          {component.props.text || 'Привет!'}
+        </span>
+      )
+    case 'SEND':
+      return <span style={{ fontSize: `${18 * scale}px`, color: '#07070c' }}>➤</span>
+    case 'SEARCH':
+      return (
+        <span className="w-full px-3 text-left text-white/40">
+          🔍 {component.props.placeholder || component.props.text || 'Найти чат'}
+        </span>
+      )
     default:
       return null
   }
@@ -201,13 +248,14 @@ export function ShortsRuntime({
 
   return (
     <PhoneFrame scale={scale}>
-      <div className="absolute inset-0 bg-[#07070c]">
+      <div className="relative h-full w-full bg-[#07070c]">
         {layout.components.map((component) => (
           <ComponentView
             key={component.id}
             component={component}
             interactive={interactive}
             onAction={onAction}
+            scale={scale}
           />
         ))}
         {layout.components.length === 0 && (
@@ -222,10 +270,10 @@ export function ShortsRuntime({
 
 function MissingState({ message }: { message: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-[#12080c] px-8 text-center">
-      <p className="text-4xl">⚠</p>
-      <p className="mt-4 font-display text-2xl text-gold">UI STATE NOT FOUND</p>
-      <p className="mt-3 text-white/70">{message}</p>
+    <div className="flex h-full flex-col items-center justify-center bg-[#12080c] px-6 text-center">
+      <p className="text-3xl">⚠</p>
+      <p className="mt-3 font-display text-xl text-gold">UI STATE NOT FOUND</p>
+      <p className="mt-2 text-sm text-white/70">{message}</p>
     </div>
   )
 }

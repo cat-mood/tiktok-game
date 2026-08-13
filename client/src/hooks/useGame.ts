@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   CLIENT_EVENTS,
   SERVER_EVENTS,
-  emptyDesign,
-  emptyLogic,
-  emptyMarketing,
-  emptyQa,
+  createPresetProject,
   type ClientGameState,
   type Identity,
 } from '@brainrot/shared'
@@ -20,15 +17,7 @@ const emptyState: ClientGameState = {
   phaseEndsAt: null,
   workDurationMs: 0,
   players: [],
-  project: {
-    name: 'SHORTS',
-    revision: 0,
-    states: [],
-    design: emptyDesign(),
-    logic: emptyLogic(),
-    marketing: emptyMarketing(),
-    qa: emptyQa(),
-  },
+  project: createPresetProject(),
   release: null,
   restoredFromDisk: false,
   devTools: false,

@@ -3,7 +3,7 @@ export const PRODUCT_NAME = 'SHORTS'
 export const CANVAS_WIDTH = 390
 export const CANVAS_HEIGHT = 844
 
-export const SCREEN_KEYS = ['FEED', 'VIDEO', 'COMMENTS', 'PROFILE', 'SHARE'] as const
+export const SCREEN_KEYS = ['FEED', 'VIDEO', 'COMMENTS', 'PROFILE', 'SHARE', 'CREATE', 'INBOX', 'COMPOSE'] as const
 export type ScreenKey = (typeof SCREEN_KEYS)[number]
 
 export const COMPONENT_TYPES = [
@@ -18,6 +18,12 @@ export const COMPONENT_TYPES = [
   'NAVIGATION',
   'INPUT',
   'MODAL',
+  'CAMERA',
+  'RECORD',
+  'CHAT_ROW',
+  'BUBBLE',
+  'SEND',
+  'SEARCH',
 ] as const
 export type ComponentType = (typeof COMPONENT_TYPES)[number]
 
@@ -42,6 +48,11 @@ export const COMPONENT_EVENT_MAP: Partial<Record<ComponentType, LogicEvent>> = {
   INPUT: 'SUBMIT',
   MODAL: 'CLOSE',
   VIDEO: 'SWIPE',
+  CAMERA: 'CLICK',
+  RECORD: 'CLICK',
+  CHAT_ROW: 'CLICK',
+  SEND: 'SUBMIT',
+  SEARCH: 'SUBMIT',
 }
 
 export const CONDITION_PROPERTIES = ['video.isLiked', 'comments.isOpen', 'share.isOpen'] as const
@@ -230,7 +241,24 @@ export const DEFAULT_COMPONENT_BOX: Record<ComponentType, { w: number; h: number
     NAVIGATION: { x: 0, y: 780, w: CANVAS_WIDTH, h: 64 },
     INPUT: { x: 16, y: 760, w: 358, h: 44 },
     MODAL: { x: 24, y: 180, w: 342, h: 300 },
+    CAMERA: { x: 0, y: 0, w: CANVAS_WIDTH, h: 640 },
+    RECORD: { x: 155, y: 670, w: 80, h: 80 },
+    CHAT_ROW: { x: 0, y: 88, w: CANVAS_WIDTH, h: 72 },
+    BUBBLE: { x: 16, y: 120, w: 260, h: 64 },
+    SEND: { x: 326, y: 760, w: 48, h: 44 },
+    SEARCH: { x: 16, y: 16, w: 358, h: 44 },
   }
+
+export const SCREEN_COMPONENTS: Record<ScreenKey, ComponentType[]> = {
+  VIDEO: ['VIDEO', 'LIKE', 'COMMENT', 'SHARE', 'AVATAR', 'TEXT', 'NAVIGATION'],
+  FEED: ['IMAGE', 'VIDEO', 'TEXT', 'AVATAR', 'LIKE', 'NAVIGATION'],
+  COMMENTS: ['AVATAR', 'TEXT', 'INPUT', 'BUTTON', 'COMMENT', 'MODAL'],
+  PROFILE: ['AVATAR', 'TEXT', 'BUTTON', 'IMAGE', 'NAVIGATION'],
+  SHARE: ['SHARE', 'BUTTON', 'TEXT', 'IMAGE', 'MODAL'],
+  CREATE: ['CAMERA', 'RECORD', 'BUTTON', 'TEXT', 'IMAGE', 'AVATAR', 'NAVIGATION'],
+  INBOX: ['CHAT_ROW', 'SEARCH', 'AVATAR', 'TEXT', 'BUTTON', 'NAVIGATION'],
+  COMPOSE: ['BUBBLE', 'INPUT', 'SEND', 'AVATAR', 'TEXT', 'BUTTON'],
+}
 
 export const SIZE_PRESET_BOX: Record<SizePreset, { w: number; h: number }> = {
   S: { w: 48, h: 48 },
@@ -239,11 +267,14 @@ export const SIZE_PRESET_BOX: Record<SizePreset, { w: number; h: number }> = {
 }
 
 export const SCREEN_LABELS: Record<ScreenKey, string> = {
-  FEED: 'Feed',
-  VIDEO: 'Video',
-  COMMENTS: 'Comments',
-  PROFILE: 'Profile',
-  SHARE: 'Share',
+  FEED: 'Лента',
+  VIDEO: 'Клип',
+  COMMENTS: 'Комменты',
+  PROFILE: 'Профиль',
+  SHARE: 'Репост',
+  CREATE: 'Съёмка',
+  INBOX: 'Чаты',
+  COMPOSE: 'Сообщение',
 }
 
 export const EVENT_LABELS: Record<LogicEvent, string> = {
@@ -258,17 +289,63 @@ export const EVENT_LABELS: Record<LogicEvent, string> = {
 }
 
 export const COMPONENT_LABELS: Record<ComponentType, string> = {
-  VIDEO: 'Video',
-  TEXT: 'Text',
-  BUTTON: 'Button',
-  IMAGE: 'Image',
-  AVATAR: 'Avatar',
-  LIKE: 'Like',
-  COMMENT: 'Comment',
-  SHARE: 'Share',
-  NAVIGATION: 'Nav',
-  INPUT: 'Input',
-  MODAL: 'Modal',
+  VIDEO: 'Видео',
+  TEXT: 'Текст',
+  BUTTON: 'Кнопка',
+  IMAGE: 'Картинка',
+  AVATAR: 'Аватар',
+  LIKE: 'Лайк',
+  COMMENT: 'Коммент',
+  SHARE: 'Репост',
+  NAVIGATION: 'Меню',
+  INPUT: 'Ввод',
+  MODAL: 'Окно',
+  CAMERA: 'Камера',
+  RECORD: 'Снять',
+  CHAT_ROW: 'Чат',
+  BUBBLE: 'Пузырь',
+  SEND: 'Отправить',
+  SEARCH: 'Поиск',
+}
+
+export const COMPONENT_ICONS: Record<ComponentType, string> = {
+  VIDEO: '▶',
+  TEXT: 'Aa',
+  BUTTON: '⬤',
+  IMAGE: '🖼',
+  AVATAR: '🙂',
+  LIKE: '🤍',
+  COMMENT: '💬',
+  SHARE: '📤',
+  NAVIGATION: '⌂',
+  INPUT: '✏️',
+  MODAL: '▢',
+  CAMERA: '📷',
+  RECORD: '⏺',
+  CHAT_ROW: '💬',
+  BUBBLE: '💭',
+  SEND: '➤',
+  SEARCH: '🔍',
+}
+
+export const COMPONENT_HINTS: Record<ComponentType, string> = {
+  VIDEO: 'Сам клип на экране — то, что смотрят',
+  TEXT: 'Подпись, ник или заголовок',
+  BUTTON: 'Большая кнопка: подписаться, закрыть, далее',
+  IMAGE: 'Обложка, превью или баннер',
+  AVATAR: 'Кружок автора в углу',
+  LIKE: 'Сердечко справа. По нему ставят лайк',
+  COMMENT: 'Иконка комментариев',
+  SHARE: 'Иконка «поделиться»',
+  NAVIGATION: 'Нижнее меню: лента, клип, съёмка, чаты',
+  INPUT: 'Поле ввода: комментарий или сообщение',
+  MODAL: 'Окно поверх экрана',
+  CAMERA: 'Видоискатель. То, что снимает камера',
+  RECORD: 'Большая кнопка записи клипа',
+  CHAT_ROW: 'Строка в списке чатов: кто и о чём писал',
+  BUBBLE: 'Пузырь сообщения. Своё или чужое',
+  SEND: 'Кнопка отправить в переписке',
+  SEARCH: 'Поиск по чатам или людям',
 }
 
 export const MERCH_LABELS: Record<MerchKind, string> = {
@@ -297,12 +374,122 @@ export function defaultFlags(): RuntimeFlags {
   }
 }
 
+export const INITIAL_STATE_ID = 'video'
+
+export const PRESET_STATES: ReadonlyArray<{
+  id: string
+  name: string
+  screenKey: ScreenKey
+  hint: string
+  flags: RuntimeFlags
+}> = [
+  {
+    id: 'video',
+    name: 'Клип',
+    screenKey: 'VIDEO',
+    hint: 'Обычный ролик. Приложение стартует отсюда.',
+    flags: defaultFlags(),
+  },
+  {
+    id: 'video-liked',
+    name: 'Клип с лайком',
+    screenKey: 'VIDEO',
+    hint: 'Тот же клип, но сердечко уже красное.',
+    flags: { ...defaultFlags(), 'video.isLiked': true },
+  },
+  {
+    id: 'comments',
+    name: 'Комменты',
+    screenKey: 'COMMENTS',
+    hint: 'Экран комментариев. Открывается по иконке 💬',
+    flags: { ...defaultFlags(), 'comments.isOpen': true },
+  },
+  {
+    id: 'share',
+    name: 'Репост',
+    screenKey: 'SHARE',
+    hint: 'Экран «поделиться». Открывается по иконке 📤',
+    flags: { ...defaultFlags(), 'share.isOpen': true },
+  },
+  {
+    id: 'feed',
+    name: 'Лента',
+    screenKey: 'FEED',
+    hint: 'Лента роликов. Сюда свайпают из клипа.',
+    flags: defaultFlags(),
+  },
+  {
+    id: 'profile',
+    name: 'Профиль',
+    screenKey: 'PROFILE',
+    hint: 'Страница автора.',
+    flags: defaultFlags(),
+  },
+  {
+    id: 'create',
+    name: 'Создание видео',
+    screenKey: 'CREATE',
+    hint: 'Камера и кнопка «снять». Отсюда публикуют новый клип.',
+    flags: defaultFlags(),
+  },
+  {
+    id: 'inbox',
+    name: 'Чаты',
+    screenKey: 'INBOX',
+    hint: 'Список переписок. Тап по чату открывает набор сообщения.',
+    flags: defaultFlags(),
+  },
+  {
+    id: 'compose',
+    name: 'Сообщение',
+    screenKey: 'COMPOSE',
+    hint: 'Переписка: история сообщений и поле ввода.',
+    flags: defaultFlags(),
+  },
+]
+
+export function isPresetStateId(value: string): boolean {
+  return PRESET_STATES.some((item) => item.id === value)
+}
+
+export function presetHint(stateId: string): string {
+  return PRESET_STATES.find((item) => item.id === stateId)?.hint ?? ''
+}
+
+export function presetAppStates(): AppState[] {
+  return PRESET_STATES.map((item) => ({
+    id: item.id,
+    name: item.name,
+    screenKey: item.screenKey,
+    flags: { ...item.flags },
+  }))
+}
+
+export function createPresetProject(): Project {
+  const states = presetAppStates()
+  return {
+    name: PRODUCT_NAME,
+    revision: 0,
+    states,
+    design: {
+      screens: [...SCREEN_KEYS],
+      layouts: states.map((state) => ({ stateId: state.id, components: [] })),
+    },
+    logic: {
+      initialStateId: INITIAL_STATE_ID,
+      transitions: [],
+    },
+    marketing: emptyMarketing(),
+    qa: emptyQa(),
+  }
+}
+
 export function emptyDesign(): DesignDoc {
-  return { screens: ['VIDEO'], layouts: [] }
+  return { screens: [...SCREEN_KEYS], layouts: [] }
 }
 
 export function emptyLogic(): LogicDoc {
-  return { initialStateId: null, transitions: [] }
+  return { initialStateId: INITIAL_STATE_ID, transitions: [] }
 }
 
 export function emptyMarketing(): MarketingDoc {
@@ -311,6 +498,94 @@ export function emptyMarketing(): MarketingDoc {
 
 export function emptyQa(): QaDoc {
   return { testCases: [], bugs: [] }
+}
+
+export function ensurePresetProject(project: Project): Project {
+  const idMap = mapLegacyStateIds(project.states)
+  const remap = (id: string | null | undefined): string => {
+    if (!id) {
+      return INITIAL_STATE_ID
+    }
+    const next = idMap.get(id) ?? (isPresetStateId(id) ? id : INITIAL_STATE_ID)
+    return isPresetStateId(next) ? next : INITIAL_STATE_ID
+  }
+  const layoutsByPreset = new Map<string, DesignComponent[]>()
+  for (const layout of project.design.layouts) {
+    const presetId = remap(layout.stateId)
+    const existing = layoutsByPreset.get(presetId)
+    if (!existing || layout.components.length > existing.length) {
+      layoutsByPreset.set(presetId, layout.components)
+    }
+  }
+  const states = presetAppStates()
+  return {
+    ...project,
+    states,
+    design: {
+      screens: [...SCREEN_KEYS],
+      layouts: states.map((state) => ({
+        stateId: state.id,
+        components: layoutsByPreset.get(state.id) ?? [],
+      })),
+    },
+    logic: {
+      initialStateId: remap(project.logic.initialStateId),
+      transitions: project.logic.transitions.map((item) => ({
+        ...item,
+        fromStateId: remap(item.fromStateId),
+        toStateId: remap(item.toStateId),
+        elseStateId: item.elseStateId ? remap(item.elseStateId) : null,
+      })),
+    },
+    qa: {
+      ...project.qa,
+      testCases: project.qa.testCases.map((test) => ({
+        ...test,
+        startStateId: remap(test.startStateId),
+        expectedStateId: remap(test.expectedStateId),
+        lastResult: test.lastResult
+          ? {
+              ...test.lastResult,
+              expectedStateId: remap(test.lastResult.expectedStateId),
+              actualStateId: remap(test.lastResult.actualStateId),
+            }
+          : null,
+      })),
+    },
+  }
+}
+
+function mapLegacyStateIds(states: AppState[]): Map<string, string> {
+  const idMap = new Map<string, string>()
+  const taken = new Set<string>()
+  for (const state of states) {
+    const mapped = suggestPresetId(state)
+    if (!mapped || taken.has(mapped)) {
+      continue
+    }
+    idMap.set(state.id, mapped)
+    taken.add(mapped)
+  }
+  return idMap
+}
+
+function suggestPresetId(state: AppState): string | null {
+  if (isPresetStateId(state.id)) {
+    return state.id
+  }
+  const exact = PRESET_STATES.find((item) => item.screenKey === state.screenKey && item.name === state.name)
+  if (exact) {
+    return exact.id
+  }
+  const upper = state.name.toUpperCase()
+  if (state.screenKey === 'VIDEO') {
+    if (upper.includes('LIKE')) {
+      return 'video-liked'
+    }
+    return 'video'
+  }
+  const unique = PRESET_STATES.filter((item) => item.screenKey === state.screenKey)
+  return unique.length === 1 ? unique[0].id : null
 }
 
 export function layoutForState(design: DesignDoc, stateId: string): DesignLayout | undefined {

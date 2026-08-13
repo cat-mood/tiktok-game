@@ -6,6 +6,7 @@ import {
   DEPARTMENTS,
   PRODUCT_NAME,
   defaultFlags,
+  ensurePresetProject,
   isBugSeverity,
   isComponentType,
   isConditionProperty,
@@ -27,7 +28,6 @@ import {
   type Poster,
   type Project,
   type RuntimeFlags,
-  type ScreenKey,
   type TestCase,
   type TestRun,
 } from '@brainrot/shared'
@@ -333,76 +333,6 @@ export class GameStore {
     return created
   }
 
-  createState(actor: DepartmentId, payload: { name: string; screenKey: ScreenKey }): AppState {
-    this.requireEditable(actor, 'any')
-    const name = clampName(payload.name)
-    if (!isScreenKey(payload.screenKey)) {
-      throw new GameError('Неизвестный экран')
-    }
-    const state: AppState = {
-      id: randomUUID(),
-      name,
-      screenKey: payload.screenKey,
-      flags: defaultFlags(),
-    }
-    this.state.project.states.push(state)
-    if (!this.state.project.design.screens.includes(payload.screenKey) && actor === 'design') {
-      this.state.project.design.screens.push(payload.screenKey)
-    }
-    if (actor === 'design') {
-      this.state.project.design.layouts.push({ stateId: state.id, components: [] })
-    }
-    if (!this.state.project.logic.initialStateId) {
-      this.state.project.logic.initialStateId = state.id
-    }
-    this.bumpProject()
-    return { ...state, flags: { ...state.flags } }
-  }
-
-  renameState(actor: DepartmentId, stateId: string, name: string): void {
-    this.requireEditable(actor, 'any')
-    const state = this.requireState(stateId)
-    state.name = clampName(name)
-    this.bumpProject()
-  }
-
-  deleteState(actor: DepartmentId, stateId: string): void {
-    this.requireEditable(actor, 'any')
-    this.requireState(stateId)
-    this.state.project.states = this.state.project.states.filter((item) => item.id !== stateId)
-    this.state.project.design.layouts = this.state.project.design.layouts.filter(
-      (layout) => layout.stateId !== stateId,
-    )
-    this.state.project.logic.transitions = this.state.project.logic.transitions.filter(
-      (item) => item.fromStateId !== stateId && item.toStateId !== stateId && item.elseStateId !== stateId,
-    )
-    if (this.state.project.logic.initialStateId === stateId) {
-      this.state.project.logic.initialStateId = this.state.project.states[0]?.id ?? null
-    }
-    this.bumpProject()
-  }
-
-  setStateFlags(actor: DepartmentId, stateId: string, flags: RuntimeFlags): void {
-    this.requireEditable(actor, 'any')
-    const state = this.requireState(stateId)
-    state.flags = {
-      'video.isLiked': Boolean(flags['video.isLiked']),
-      'comments.isOpen': Boolean(flags['comments.isOpen']),
-      'share.isOpen': Boolean(flags['share.isOpen']),
-    }
-    this.bumpProject()
-  }
-
-  setScreens(actor: DepartmentId, screens: ScreenKey[]): void {
-    this.requireEditable(actor, 'design')
-    const unique = [...new Set(screens.filter(isScreenKey))]
-    if (unique.length === 0) {
-      throw new GameError('Нужен хотя бы один экран')
-    }
-    this.state.project.design.screens = unique
-    this.bumpProject()
-  }
-
   upsertComponent(actor: DepartmentId, stateId: string, component: DesignComponent): void {
     this.requireEditable(actor, 'design')
     this.requireState(stateId)
@@ -426,29 +356,6 @@ export class GameStore {
       throw new GameError('Компонент не найден')
     }
     this.bumpProject()
-  }
-
-  duplicateState(actor: DepartmentId, stateId: string, name: string): AppState {
-    this.requireEditable(actor, 'design')
-    const source = this.requireState(stateId)
-    const layout = this.requireLayout(stateId)
-    const copy: AppState = {
-      id: randomUUID(),
-      name: clampName(name),
-      screenKey: source.screenKey,
-      flags: { ...source.flags },
-    }
-    this.state.project.states.push(copy)
-    this.state.project.design.layouts.push({
-      stateId: copy.id,
-      components: layout.components.map((item) => ({
-        ...item,
-        id: randomUUID(),
-        props: { ...item.props },
-      })),
-    })
-    this.bumpProject()
-    return { ...copy, flags: { ...copy.flags } }
   }
 
   upsertTransition(actor: DepartmentId, transition: LogicTransition): void {
@@ -878,7 +785,7 @@ function normalizeProject(project: Project | undefined): Project {
     'comments.isOpen': Boolean(value?.['comments.isOpen']),
     'share.isOpen': Boolean(value?.['share.isOpen']),
   })
-  return {
+  return ensurePresetProject({
     name: project.name || PRODUCT_NAME,
     revision: typeof project.revision === 'number' ? project.revision : 0,
     states: project.states.map((state) => ({
@@ -924,7 +831,7 @@ function normalizeProject(project: Project | undefined): Project {
         : [],
       bugs: Array.isArray(project.qa?.bugs) ? project.qa.bugs.map((bug) => normalizeBug(bug)) : [],
     },
-  }
+  })
 }
 
 function cloneProject(project: Project): Project {

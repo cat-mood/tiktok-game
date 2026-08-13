@@ -1,6 +1,5 @@
 import type { DepartmentId } from './types.js'
 import type {
-  AppState,
   BugReport,
   BugSeverity,
   CampaignIdea,
@@ -23,14 +22,8 @@ export const CLIENT_EVENTS = {
   playerJoin: 'player:join',
   playerChangeDepartment: 'player:changeDepartment',
   playerReconnect: 'player:reconnect',
-  projectCreateState: 'project:createState',
-  projectRenameState: 'project:renameState',
-  projectDeleteState: 'project:deleteState',
-  projectSetStateFlags: 'project:setStateFlags',
-  designSetScreens: 'design:setScreens',
   designUpsertComponent: 'design:upsertComponent',
   designDeleteComponent: 'design:deleteComponent',
-  designDuplicateState: 'design:duplicateState',
   logicUpsertTransition: 'logic:upsertTransition',
   logicDeleteTransition: 'logic:deleteTransition',
   logicSetInitialState: 'logic:setInitialState',
@@ -104,27 +97,8 @@ export type AdminStartGamePayload = {
   workDurationMs?: number
 }
 
-export type CreateStatePayload = {
-  name: string
-  screenKey: ScreenKey
-}
-
-export type RenameStatePayload = {
-  stateId: string
-  name: string
-}
-
 export type StateIdPayload = {
   stateId: string
-}
-
-export type SetStateFlagsPayload = {
-  stateId: string
-  flags: AppState['flags']
-}
-
-export type SetScreensPayload = {
-  screens: ScreenKey[]
 }
 
 export type UpsertComponentPayload = {
@@ -135,11 +109,6 @@ export type UpsertComponentPayload = {
 export type DeleteComponentPayload = {
   stateId: string
   componentId: string
-}
-
-export type DuplicateStatePayload = {
-  stateId: string
-  name: string
 }
 
 export type UpsertTransitionPayload = {
