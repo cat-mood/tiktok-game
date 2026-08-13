@@ -9,6 +9,7 @@ import {
   type LogicEvent,
   type LogicTransition,
 } from '@brainrot/shared'
+import { Onboarding } from '../components/Onboarding'
 import { newId, patch } from '../lib/patch'
 
 type Props = {
@@ -51,6 +52,7 @@ export function DevelopmentWorkspace({ state, onError, readOnly }: Props) {
 
   return (
     <div className="space-y-4 pb-8">
+      <Onboarding id="development" steps={DEV_STEPS} />
       <section className="rounded-3xl border border-line bg-panel p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-white/40">Начальное состояние</p>
         <select
@@ -287,3 +289,18 @@ function StateSelect({
     </select>
   )
 }
+
+const DEV_STEPS = [
+  {
+    title: 'Вы собираете логику',
+    body: 'Код писать не нужно. Вы говорите: из какого состояния, по какому действию, куда перейти.',
+  },
+  {
+    title: 'Пример для лайка',
+    body: 'FROM: DEFAULT. EVENT: CLICK LIKE. TO: LIKED. Если поставить TO обратно в DEFAULT — лайк в финальном приложении не сработает. Это не ошибка игры, а вашей логики.',
+  },
+  {
+    title: 'Баги от QA',
+    body: 'Если тестировщики найдут сломанный переход, карточка бага появится здесь. Исправлять логику или нет — решаете вы.',
+  },
+]

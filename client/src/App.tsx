@@ -85,7 +85,7 @@ function ConnectionBar({
   }
 
   return (
-    <div className="sticky top-0 z-10 px-4 pt-4">
+    <div className="sticky top-0 z-[90] px-4 pt-4">
       {!connected && (
         <div className="rounded-2xl bg-mag/20 px-4 py-3 text-center text-mag">
           Нет связи с сервером. Переподключаемся...

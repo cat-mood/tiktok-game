@@ -8,6 +8,7 @@ import {
   type MerchKind,
   type Poster,
 } from '@brainrot/shared'
+import { Onboarding } from '../components/Onboarding'
 import { newId, patch } from '../lib/patch'
 
 type Props = {
@@ -53,6 +54,7 @@ export function MarketingWorkspace({ state, onError, readOnly }: Props) {
 
   return (
     <div className="space-y-5 pb-8">
+      <Onboarding id="marketing" steps={MARKETING_STEPS} />
       <section className="rounded-3xl border border-line bg-panel p-4">
         <h2 className="font-display text-2xl">Слоган</h2>
         <input
@@ -288,3 +290,14 @@ export function MerchMockup({
     </div>
   )
 }
+
+const MARKETING_STEPS = [
+  {
+    title: 'Вы готовите запуск SHORTS',
+    body: 'Придумайте слоган, загрузите ролик, соберите постер и мерч. Это не оценивается автоматически — материалы покажут на финальном экране.',
+  },
+  {
+    title: 'Ролик можно снять в CapCut',
+    body: 'Здесь достаточно загрузить готовый файл. Постер собирается из фона и текста. Идеи продвижения — карточками.',
+  },
+]

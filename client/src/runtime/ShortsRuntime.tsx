@@ -20,19 +20,25 @@ export function PhoneFrame({ scale, children, className }: PhoneFrameProps) {
   return (
     <div
       className={[
-        'relative overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow',
+        'relative z-0 overflow-hidden rounded-[2rem] border border-white/20 bg-black shadow-glow',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
-      style={{ width: CANVAS_WIDTH * scale, height: CANVAS_HEIGHT * scale }}
+      style={{
+        width: CANVAS_WIDTH * scale,
+        height: CANVAS_HEIGHT * scale,
+        clipPath: 'inset(0)',
+        isolation: 'isolate',
+      }}
     >
       <div
-        className="absolute left-0 top-0 origin-top-left touch-none"
+        className="touch-none"
         style={{
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
-          transform: `scale(${scale})`,
+          zoom: scale,
+          transformOrigin: 'top left',
         }}
       >
         {children}

@@ -10,6 +10,7 @@ import {
   type Player,
   type TestCase,
 } from '@brainrot/shared'
+import { Onboarding } from '../components/Onboarding'
 import { newId, patch } from '../lib/patch'
 
 type Props = {
@@ -48,6 +49,7 @@ export function QaWorkspace({ me, state, onError, readOnly }: Props) {
 
   return (
     <div className="space-y-4 pb-8">
+      <Onboarding id="qa" steps={QA_STEPS} />
       <section className="space-y-3">
         <h2 className="font-display text-2xl">Тест-кейсы</h2>
         {project.qa.testCases.length === 0 && (
@@ -279,3 +281,14 @@ function StateSelect({
     </select>
   )
 }
+
+const QA_STEPS = [
+  {
+    title: 'Вы проверяете чужую работу',
+    body: 'Правильных ответов нет. Соберите сценарий: с какого состояния начать, какое действие нажать, куда должно прийти приложение.',
+  },
+  {
+    title: 'RUN TEST — это настоящий запуск',
+    body: 'Система прогоняет логику Development. PASS значит переход совпал. FAIL — покажем Expected и Actual. Если тест красный, заведите bug.',
+  },
+]
