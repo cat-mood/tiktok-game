@@ -1,4 +1,4 @@
-export const PRODUCT_NAME = 'SHORTS'
+export const PRODUCT_NAME = 'брейнрот клипы'
 
 export const CANVAS_WIDTH = 390
 export const CANVAS_HEIGHT = 844
@@ -64,8 +64,34 @@ export type ConditionOperator = (typeof CONDITION_OPERATORS)[number]
 export const BUG_SEVERITIES = ['HIGH', 'MEDIUM', 'LOW'] as const
 export type BugSeverity = (typeof BUG_SEVERITIES)[number]
 
-export const MERCH_KINDS = ['tshirt', 'sticker', 'cap', 'mug'] as const
+export const MERCH_KINDS = ['tshirt', 'hoodie', 'sticker', 'cap', 'mug', 'tote'] as const
 export type MerchKind = (typeof MERCH_KINDS)[number]
+
+export const MERCH_PATTERNS = ['none', 'stripes', 'dots', 'grid', 'chevrons', 'stars', 'waves', 'camo', 'hearts'] as const
+export type MerchPattern = (typeof MERCH_PATTERNS)[number]
+
+export const MERCH_PRINT_KINDS = ['text', 'draw', 'pattern', 'sticker'] as const
+export type MerchPrintKind = (typeof MERCH_PRINT_KINDS)[number]
+
+export const IDEA_STICKER_COLORS = ['#ff2d6a', '#00f0ff', '#ffd166', '#ffffff', '#7cff6b', '#c084fc', '#ff8c1a', '#ff6b9d']
+
+export const IDEA_CHANNELS = ['tiktok', 'reels', 'youtube', 'stories', 'offline', 'collab'] as const
+export type IdeaChannel = (typeof IDEA_CHANNELS)[number]
+
+export const IDEA_STATUSES = ['spark', 'draft', 'ready'] as const
+export type IdeaStatus = (typeof IDEA_STATUSES)[number]
+
+export const VIDEO_PLATFORMS = ['tiktok', 'reels', 'youtube', 'clips'] as const
+export type VideoPlatform = (typeof VIDEO_PLATFORMS)[number]
+
+export const POSTER_LAYER_KINDS = ['text', 'image', 'shape', 'sticker', 'draw'] as const
+export type PosterLayerKind = (typeof POSTER_LAYER_KINDS)[number]
+
+export const POSTER_SHAPES = ['rect', 'circle', 'star', 'banner'] as const
+export type PosterShape = (typeof POSTER_SHAPES)[number]
+
+export const POSTER_WIDTH = 360
+export const POSTER_HEIGHT = 520
 
 export const SIZE_PRESETS = ['S', 'M', 'L'] as const
 export type SizePreset = (typeof SIZE_PRESETS)[number]
@@ -167,38 +193,84 @@ export type QaDoc = {
 
 export type PosterLayer = {
   id: string
-  kind: 'text' | 'image'
+  kind: PosterLayerKind
   text?: string
   src?: string
   x: number
   y: number
+  w?: number
+  h?: number
+  rotation?: number
   fontSize?: number
   color?: string
+  fill?: string
+  opacity?: number
+  shape?: PosterShape
+  path?: string
+  strokeWidth?: number
 }
 
 export type Poster = {
   id: string
+  title?: string
   background: string
   layers: PosterLayer[]
 }
 
 export type CampaignIdea = {
   id: string
+  title?: string
   text: string
+  hook?: string
+  channel?: IdeaChannel
+  audience?: string
+  cta?: string
+  status?: IdeaStatus
+  color?: string
+}
+
+export type MerchPrintLayer = {
+  id: string
+  kind: MerchPrintKind
+  text?: string
+  path?: string
+  pattern?: MerchPattern
+  x: number
+  y: number
+  w?: number
+  h?: number
+  fontSize?: number
+  color?: string
+  strokeWidth?: number
+  rotation?: number
+  opacity?: number
 }
 
 export type MerchItem = {
   id: string
   kind: MerchKind
+  name?: string
   text: string
   color: string
+  accent?: string
+  textColor?: string
   logoSrc?: string
+  printX?: number
+  printY?: number
+  printScale?: number
+  pattern?: MerchPattern
+  layers?: MerchPrintLayer[]
 }
 
 export type MarketingVideo = {
   id: string
   url: string
   name: string
+  title?: string
+  hook?: string
+  script?: string
+  platform?: VideoPlatform
+  notes?: string
 }
 
 export type MarketingDoc = {
@@ -240,7 +312,7 @@ export const DEFAULT_COMPONENT_BOX: Record<ComponentType, { w: number; h: number
     SHARE: { x: 322, y: 616, w: 52, h: 52 },
     NAVIGATION: { x: 0, y: 780, w: CANVAS_WIDTH, h: 64 },
     INPUT: { x: 16, y: 760, w: 358, h: 44 },
-    MODAL: { x: 24, y: 180, w: 342, h: 300 },
+    MODAL: { x: 10, y: 240, w: 370, h: 520 },
     CAMERA: { x: 0, y: 0, w: CANVAS_WIDTH, h: 640 },
     RECORD: { x: 155, y: 670, w: 80, h: 80 },
     CHAT_ROW: { x: 0, y: 88, w: CANVAS_WIDTH, h: 72 },
@@ -286,6 +358,34 @@ export const EVENT_LABELS: Record<LogicEvent, string> = {
   BACK: 'BACK',
   SUBMIT: 'SUBMIT',
   CLOSE: 'CLOSE',
+}
+
+export const BLOCK_EVENT_LABELS: Record<LogicEvent, string> = {
+  CLICK: 'нажали',
+  CLICK_LIKE: 'нажали лайк',
+  CLICK_COMMENT: 'нажали коммент',
+  CLICK_SHARE: 'нажали репост',
+  SWIPE: 'свайпнули',
+  BACK: 'назад',
+  SUBMIT: 'отправили',
+  CLOSE: 'закрыли',
+}
+
+export const BLOCK_EVENT_SHORT: Record<LogicEvent, string> = {
+  CLICK: 'Тап',
+  CLICK_LIKE: 'Лайк',
+  CLICK_COMMENT: 'Коммент',
+  CLICK_SHARE: 'Репост',
+  SWIPE: 'Свайп',
+  BACK: 'Назад',
+  SUBMIT: 'Отправить',
+  CLOSE: 'Закрыть',
+}
+
+export const BLOCK_CONDITION_LABELS: Record<ConditionProperty, string> = {
+  'video.isLiked': 'лайк стоит',
+  'comments.isOpen': 'комменты открыты',
+  'share.isOpen': 'репост открыт',
 }
 
 export const COMPONENT_LABELS: Record<ComponentType, string> = {
@@ -350,10 +450,97 @@ export const COMPONENT_HINTS: Record<ComponentType, string> = {
 
 export const MERCH_LABELS: Record<MerchKind, string> = {
   tshirt: 'Футболка',
+  hoodie: 'Худи',
   sticker: 'Стикер',
   cap: 'Кепка',
   mug: 'Кружка',
+  tote: 'Шоппер',
 }
+
+export const MERCH_PATTERN_LABELS: Record<MerchPattern, string> = {
+  none: 'Чистый',
+  stripes: 'Полоски',
+  dots: 'Горох',
+  grid: 'Сетка',
+  chevrons: 'Шеврон',
+  stars: 'Звёзды',
+  waves: 'Волны',
+  camo: 'Камо',
+  hearts: 'Сердца',
+}
+
+export const IDEA_CHANNEL_LABELS: Record<IdeaChannel, string> = {
+  tiktok: 'TikTok',
+  reels: 'Reels',
+  youtube: 'YouTube',
+  stories: 'Stories',
+  offline: 'Офлайн',
+  collab: 'Коллаб',
+}
+
+export const IDEA_STATUS_LABELS: Record<IdeaStatus, string> = {
+  spark: 'Искра',
+  draft: 'Черновик',
+  ready: 'Готово',
+}
+
+export const VIDEO_PLATFORM_LABELS: Record<VideoPlatform, string> = {
+  tiktok: 'TikTok',
+  reels: 'Reels',
+  youtube: 'YouTube',
+  clips: 'Клипы',
+}
+
+export const POSTER_SHAPE_LABELS: Record<PosterShape, string> = {
+  rect: 'Прямоугольник',
+  circle: 'Круг',
+  star: 'Звезда',
+  banner: 'Баннер',
+}
+
+export const POSTER_STICKERS = ['🔥', '💥', '✨', '🎬', '❤️', '👑', '🚀', '🎵', '👀', '💯', '⚡', '🌈']
+
+export const IDEA_TEMPLATES: ReadonlyArray<{
+  title: string
+  hook: string
+  text: string
+  channel: IdeaChannel
+  cta: string
+  color: string
+}> = [
+  {
+    title: 'Челлендж недели',
+    hook: 'Сними клип за 15 секунд',
+    text: `Запускаем челлендж: пользователи повторяют хук из ${PRODUCT_NAME} и отмечают нас. Лучшие ролики залетают в подборку.`,
+    channel: 'tiktok',
+    cta: 'Сними свой клип',
+    color: '#ff2d6a',
+  },
+  {
+    title: 'UGC-коллаб',
+    hook: 'Дадим голос комьюнити',
+    text: `10 блогеров получают ранний доступ и снимают «первый день в ${PRODUCT_NAME}». Мы репостим лучшие нарезки.`,
+    channel: 'collab',
+    cta: 'Забери инвайт',
+    color: '#00f0ff',
+  },
+  {
+    title: 'Тизер-запуск',
+    hook: 'Смотри. Снимай. Делись.',
+    text: 'Три тизера: силуэт интерфейса, слоган, потом живой клип. Каждый ролик заканчивается датой запуска.',
+    channel: 'reels',
+    cta: 'Жди премьеру',
+    color: '#ffd166',
+  },
+  {
+    title: 'Уличный дроп',
+    hook: 'Мерч ловят в городе',
+    text: `Стикеры и шопперы в местах, где снимают. QR ведёт на ленту ${PRODUCT_NAME} и промо-ролик.`,
+    channel: 'offline',
+    cta: 'Найди дроп',
+    color: '#9966ff',
+  },
+]
 
 export const POSTER_BACKGROUNDS = [
   '#07070c',
@@ -362,8 +549,12 @@ export const POSTER_BACKGROUNDS = [
   '#ffd166',
   '#1a1030',
   '#0b1f1c',
+  '#191428',
+  '#2a1030',
   'linear-gradient(180deg, #ff2d6a 0%, #07070c 100%)',
   'linear-gradient(180deg, #00f0ff 0%, #12121a 100%)',
+  'linear-gradient(135deg, #ffd166 0%, #ff2d6a 55%, #1a1030 100%)',
+  'linear-gradient(180deg, #191428 0%, #00f0ff 160%)',
 ]
 
 export function defaultFlags(): RuntimeFlags {
@@ -387,15 +578,8 @@ export const PRESET_STATES: ReadonlyArray<{
     id: 'video',
     name: 'Клип',
     screenKey: 'VIDEO',
-    hint: 'Обычный ролик. Приложение стартует отсюда.',
+    hint: 'Обычный ролик. Лайк ставится на этом же экране.',
     flags: defaultFlags(),
-  },
-  {
-    id: 'video-liked',
-    name: 'Клип с лайком',
-    screenKey: 'VIDEO',
-    hint: 'Тот же клип, но сердечко уже красное.',
-    flags: { ...defaultFlags(), 'video.isLiked': true },
   },
   {
     id: 'comments',
@@ -448,6 +632,37 @@ export const PRESET_STATES: ReadonlyArray<{
   },
 ]
 
+export type QaMission = {
+  id: string
+  emoji: string
+  title: string
+  startStateId: string
+  event: LogicEvent
+  expectedStateId: string
+}
+
+export const QA_MISSIONS: readonly QaMission[] = [
+  { id: 'comment', emoji: '💬', title: 'Комменты', startStateId: 'video', event: 'CLICK_COMMENT', expectedStateId: 'comments' },
+  { id: 'share', emoji: '📤', title: 'Репост', startStateId: 'video', event: 'CLICK_SHARE', expectedStateId: 'share' },
+  { id: 'swipe', emoji: '👆', title: 'Свайп в ленту', startStateId: 'video', event: 'SWIPE', expectedStateId: 'feed' },
+  { id: 'close-comments', emoji: '✕', title: 'Закрыть комменты', startStateId: 'comments', event: 'CLOSE', expectedStateId: 'video' },
+  { id: 'close-share', emoji: '✕', title: 'Закрыть репост', startStateId: 'share', event: 'CLOSE', expectedStateId: 'video' },
+  { id: 'open-chat', emoji: '💬', title: 'Открыть чат', startStateId: 'inbox', event: 'CLICK', expectedStateId: 'compose' },
+  { id: 'back-chat', emoji: '←', title: 'Назад из чата', startStateId: 'compose', event: 'BACK', expectedStateId: 'inbox' },
+]
+
+export function expectedFlow(startStateId: string, event: LogicEvent) {
+  return QA_MISSIONS.find((item) => item.startStateId === startStateId && item.event === event) ?? null
+}
+
+export function missionTestId(missionId: string) {
+  return `mission:${missionId}`
+}
+
+export function missionBugId(missionId: string) {
+  return `bug:${missionId}`
+}
+
 export function isPresetStateId(value: string): boolean {
   return PRESET_STATES.some((item) => item.id === value)
 }
@@ -494,6 +709,73 @@ export function emptyLogic(): LogicDoc {
 
 export function emptyMarketing(): MarketingDoc {
   return { slogan: '', videos: [], posters: [], ideas: [], merch: [] }
+}
+
+export function createEmptyIdea(id: string): CampaignIdea {
+  return {
+    id,
+    text: PRODUCT_NAME,
+    color: IDEA_STICKER_COLORS[0],
+  }
+}
+
+export function createEmptyVideo(id: string): MarketingVideo {
+  return {
+    id,
+    url: '',
+    name: 'Ролик',
+    title: 'Промо',
+    hook: '',
+    script: '',
+    platform: 'tiktok',
+    notes: '',
+  }
+}
+
+export function createEmptyPoster(id: string): Poster {
+  return {
+    id,
+    title: 'Постер',
+    background: POSTER_BACKGROUNDS[0],
+    layers: [
+      {
+        id: `${id}-title`,
+        kind: 'text',
+        text: PRODUCT_NAME,
+        x: 28,
+        y: 80,
+        fontSize: 56,
+        color: '#ffffff',
+      },
+    ],
+  }
+}
+
+export function createEmptyMerch(id: string): MerchItem {
+  return {
+    id,
+    kind: 'tshirt',
+    name: 'Футболка',
+    text: PRODUCT_NAME,
+    color: '#e8e4dc',
+    accent: '#2a2a32',
+    textColor: '#111111',
+    printX: 50,
+    printY: 42,
+    printScale: 1,
+    pattern: 'none',
+    layers: [
+      {
+        id: `${id}-text`,
+        kind: 'text',
+        text: PRODUCT_NAME,
+        x: 50,
+        y: 42,
+        fontSize: 18,
+        color: '#111111',
+      },
+    ],
+  }
 }
 
 export function emptyQa(): QaDoc {
@@ -577,11 +859,7 @@ function suggestPresetId(state: AppState): string | null {
   if (exact) {
     return exact.id
   }
-  const upper = state.name.toUpperCase()
   if (state.screenKey === 'VIDEO') {
-    if (upper.includes('LIKE')) {
-      return 'video-liked'
-    }
     return 'video'
   }
   const unique = PRESET_STATES.filter((item) => item.screenKey === state.screenKey)
@@ -618,6 +896,54 @@ export function isBugSeverity(value: string): value is BugSeverity {
 
 export function isMerchKind(value: string): value is MerchKind {
   return (MERCH_KINDS as readonly string[]).includes(value)
+}
+
+export function isMerchPattern(value: string): value is MerchPattern {
+  return (MERCH_PATTERNS as readonly string[]).includes(value)
+}
+
+export function isMerchPrintKind(value: string): value is MerchPrintKind {
+  return (MERCH_PRINT_KINDS as readonly string[]).includes(value)
+}
+
+export function merchPrintLayers(item: MerchItem): MerchPrintLayer[] {
+  if (item.layers?.length) {
+    return item.layers
+  }
+  if (!item.text && !item.logoSrc) {
+    return []
+  }
+  return [
+    {
+      id: `${item.id}-legacy`,
+      kind: 'text',
+      text: item.text,
+      x: item.printX ?? 50,
+      y: item.printY ?? 42,
+      fontSize: 18,
+      color: item.textColor ?? '#111111',
+    },
+  ]
+}
+
+export function isIdeaChannel(value: string): value is IdeaChannel {
+  return (IDEA_CHANNELS as readonly string[]).includes(value)
+}
+
+export function isIdeaStatus(value: string): value is IdeaStatus {
+  return (IDEA_STATUSES as readonly string[]).includes(value)
+}
+
+export function isVideoPlatform(value: string): value is VideoPlatform {
+  return (VIDEO_PLATFORMS as readonly string[]).includes(value)
+}
+
+export function isPosterLayerKind(value: string): value is PosterLayerKind {
+  return (POSTER_LAYER_KINDS as readonly string[]).includes(value)
+}
+
+export function isPosterShape(value: string): value is PosterShape {
+  return (POSTER_SHAPES as readonly string[]).includes(value)
 }
 
 export function projectStats(project: Project) {

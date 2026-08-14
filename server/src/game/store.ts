@@ -11,9 +11,16 @@ import {
   isComponentType,
   isConditionProperty,
   isDepartmentId,
+  isIdeaChannel,
+  isIdeaStatus,
   isLogicEvent,
   isMerchKind,
+  isMerchPattern,
+  isMerchPrintKind,
+  isPosterLayerKind,
+  isPosterShape,
   isScreenKey,
+  isVideoPlatform,
   type AppState,
   type BugReport,
   type CampaignIdea,
@@ -42,6 +49,8 @@ export type GameStoreOptions = {
 const ACTIVE_PHASES: GamePhase[] = ['LOBBY', 'WORK', 'RELEASE', 'FINISHED']
 const MAX_NAME = 40
 const MAX_TEXT = 280
+const MAX_STORY = 1200
+const MAX_PATH = 6000
 
 export function createEmptyState(workDurationMs: number = DEFAULT_WORK_MS): GameState {
   return {
@@ -461,13 +470,9 @@ export class GameStore {
 
   upsertVideo(actor: DepartmentId, video: MarketingVideo): void {
     this.requireEditable(actor, 'marketing')
-    const next: MarketingVideo = {
-      id: video.id || randomUUID(),
-      url: String(video.url ?? '').slice(0, 500),
-      name: clampName(video.name || 'Ролик'),
-    }
-    if (!next.url) {
-      throw new GameError('Нет видео')
+    const next = normalizeVideo(video)
+    if (!next.url && !next.title && !next.script) {
+      throw new GameError('Добавь ролик или сценарий')
     }
     const index = this.state.project.marketing.videos.findIndex((item) => item.id === next.id)
     if (index >= 0) {
@@ -508,10 +513,7 @@ export class GameStore {
 
   upsertIdea(actor: DepartmentId, idea: CampaignIdea): void {
     this.requireEditable(actor, 'marketing')
-    const next: CampaignIdea = {
-      id: idea.id || randomUUID(),
-      text: idea.text.trim().slice(0, MAX_TEXT),
-    }
+    const next = normalizeIdea(idea)
     if (!next.text) {
       throw new GameError('Напиши идею')
     }
@@ -534,16 +536,7 @@ export class GameStore {
 
   upsertMerch(actor: DepartmentId, merch: MerchItem): void {
     this.requireEditable(actor, 'marketing')
-    if (!isMerchKind(merch.kind)) {
-      throw new GameError('Неизвестный шаблон мерча')
-    }
-    const next: MerchItem = {
-      id: merch.id || randomUUID(),
-      kind: merch.kind,
-      text: (merch.text ?? '').trim().slice(0, 40),
-      color: String(merch.color ?? '#ff2d6a').slice(0, 40),
-      logoSrc: merch.logoSrc ? String(merch.logoSrc).slice(0, 500) : undefined,
-    }
+    const next = normalizeMerch(merch)
     const index = this.state.project.marketing.merch.findIndex((item) => item.id === next.id)
     if (index >= 0) {
       this.state.project.marketing.merch[index] = next
@@ -754,23 +747,107 @@ function normalizeBug(bug: BugReport): BugReport {
   }
 }
 
+function optionalText(value: string | undefined, max: number): string | undefined {
+  const next = (value ?? '').trim().slice(0, max)
+  return next || undefined
+}
+
+function normalizeVideo(video: MarketingVideo): MarketingVideo {
+  if (!video?.id && !video?.url && !video?.title && !video?.script && !video?.name) {
+    throw new GameError('Некорректный ролик')
+  }
+  return {
+    id: video.id || randomUUID(),
+    url: String(video.url ?? '').slice(0, 500),
+    name: (video.name || video.title || 'Ролик').trim().slice(0, MAX_NAME) || 'Ролик',
+    title: optionalText(video.title, 80),
+    hook: optionalText(video.hook, 160),
+    script: optionalText(video.script, MAX_STORY),
+    platform: video.platform && isVideoPlatform(video.platform) ? video.platform : 'tiktok',
+    notes: optionalText(video.notes, MAX_STORY),
+  }
+}
+
+function normalizeIdea(idea: CampaignIdea): CampaignIdea {
+  const text = (idea.text || idea.title || '').trim().slice(0, MAX_STORY)
+  return {
+    id: idea.id || randomUUID(),
+    title: optionalText(idea.title, 80) ?? text.slice(0, 40),
+    text,
+    hook: optionalText(idea.hook, 160),
+    channel: idea.channel && isIdeaChannel(idea.channel) ? idea.channel : 'tiktok',
+    audience: optionalText(idea.audience, 120),
+    cta: optionalText(idea.cta, 80),
+    status: idea.status && isIdeaStatus(idea.status) ? idea.status : 'spark',
+    color: String(idea.color ?? '#ff2d6a').slice(0, 40),
+  }
+}
+
+function normalizeMerch(merch: MerchItem): MerchItem {
+  if (!isMerchKind(merch.kind)) {
+    throw new GameError('Неизвестный шаблон мерча')
+  }
+  const layers = Array.isArray(merch.layers)
+    ? merch.layers.slice(0, 24).map((layer) => ({
+        id: layer.id || randomUUID(),
+        kind: isMerchPrintKind(layer.kind) ? layer.kind : 'text',
+        text: layer.text?.slice(0, 80),
+        path: layer.path?.slice(0, MAX_PATH),
+        pattern: layer.pattern && isMerchPattern(layer.pattern) ? layer.pattern : undefined,
+        x: clampCoord(layer.x, 0, 100),
+        y: clampCoord(layer.y, 0, 100),
+        w: layer.w == null ? undefined : clampCoord(layer.w, 8, 100),
+        h: layer.h == null ? undefined : clampCoord(layer.h, 8, 100),
+        fontSize: layer.fontSize == null ? undefined : clampCoord(layer.fontSize, 8, 48),
+        color: layer.color?.slice(0, 40),
+        strokeWidth: layer.strokeWidth == null ? undefined : clampCoord(layer.strokeWidth, 1, 16),
+        rotation: layer.rotation == null ? undefined : clampCoord(layer.rotation, -180, 180),
+        opacity: layer.opacity == null ? undefined : clampCoord(Math.round(layer.opacity * 100), 15, 100) / 100,
+      }))
+    : undefined
+  return {
+    id: merch.id || randomUUID(),
+    kind: merch.kind,
+    name: optionalText(merch.name, 40),
+    text: (merch.text ?? layers?.find((layer) => layer.text)?.text ?? '').trim().slice(0, 40),
+    color: String(merch.color ?? '#e8e4dc').slice(0, 40),
+    accent: String(merch.accent ?? '#2a2a32').slice(0, 40),
+    textColor: String(merch.textColor ?? '#111111').slice(0, 40),
+    logoSrc: merch.logoSrc ? String(merch.logoSrc).slice(0, 500) : undefined,
+    printX: clampCoord(merch.printX ?? 50, 8, 92),
+    printY: clampCoord(merch.printY ?? 42, 8, 92),
+    printScale: clampCoord(Math.round((merch.printScale ?? 1) * 100), 40, 180) / 100,
+    pattern: merch.pattern && isMerchPattern(merch.pattern) ? merch.pattern : 'none',
+    layers,
+  }
+}
+
 function normalizePoster(poster: Poster): Poster {
   if (!poster?.id) {
     throw new GameError('Некорректный постер')
   }
   return {
     id: poster.id,
-    background: String(poster.background ?? '#07070c').slice(0, 120),
+    title: optionalText(poster.title, 40),
+    background: String(poster.background ?? '#07070c').slice(0, 160),
     layers: Array.isArray(poster.layers)
-      ? poster.layers.slice(0, 8).map((layer) => ({
+      ? poster.layers.slice(0, 32).map((layer) => ({
           id: layer.id || randomUUID(),
-          kind: layer.kind === 'image' ? 'image' : 'text',
+          kind: isPosterLayerKind(layer.kind) ? layer.kind : 'text',
           text: layer.text?.slice(0, 80),
           src: layer.src?.slice(0, 500),
-          x: clampCoord(layer.x, 0, 360),
-          y: clampCoord(layer.y, 0, 480),
-          fontSize: clampCoord(layer.fontSize ?? 28, 12, 72),
+          x: clampCoord(layer.x, -40, 400),
+          y: clampCoord(layer.y, -40, 560),
+          w: layer.w == null ? undefined : clampCoord(layer.w, 16, 400),
+          h: layer.h == null ? undefined : clampCoord(layer.h, 16, 560),
+          rotation: layer.rotation == null ? undefined : clampCoord(layer.rotation, -180, 180),
+          fontSize: clampCoord(layer.fontSize ?? 28, 12, 96),
           color: layer.color?.slice(0, 40),
+          fill: layer.fill?.slice(0, 40),
+          opacity: layer.opacity == null ? undefined : clampCoord(Math.round(layer.opacity * 100), 15, 100) / 100,
+          shape: layer.shape && isPosterShape(layer.shape) ? layer.shape : undefined,
+          path: layer.path?.slice(0, MAX_PATH),
+          strokeWidth: layer.strokeWidth == null ? undefined : clampCoord(layer.strokeWidth, 1, 36),
         }))
       : [],
   }
@@ -786,7 +863,7 @@ function normalizeProject(project: Project | undefined): Project {
     'share.isOpen': Boolean(value?.['share.isOpen']),
   })
   return ensurePresetProject({
-    name: project.name || PRODUCT_NAME,
+    name: PRODUCT_NAME,
     revision: typeof project.revision === 'number' ? project.revision : 0,
     states: project.states.map((state) => ({
       id: state.id,
@@ -815,12 +892,18 @@ function normalizeProject(project: Project | undefined): Project {
     },
     marketing: {
       slogan: project.marketing?.slogan ?? '',
-      videos: Array.isArray(project.marketing?.videos) ? project.marketing.videos : [],
+      videos: Array.isArray(project.marketing?.videos)
+        ? project.marketing.videos.map((item) => normalizeVideo(item))
+        : [],
       posters: Array.isArray(project.marketing?.posters)
         ? project.marketing.posters.map((item) => normalizePoster(item))
         : [],
-      ideas: Array.isArray(project.marketing?.ideas) ? project.marketing.ideas : [],
-      merch: Array.isArray(project.marketing?.merch) ? project.marketing.merch : [],
+      ideas: Array.isArray(project.marketing?.ideas)
+        ? project.marketing.ideas.map((item) => normalizeIdea(item))
+        : [],
+      merch: Array.isArray(project.marketing?.merch)
+        ? project.marketing.merch.map((item) => normalizeMerch(item))
+        : [],
     },
     qa: {
       testCases: Array.isArray(project.qa?.testCases)

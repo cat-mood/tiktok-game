@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import {
   CLIENT_EVENTS,
   DEPARTMENTS,
+  MERCH_LABELS,
+  PRODUCT_NAME,
   WORK_DURATION_OPTIONS_MS,
   projectStats,
   type ClientGameState,
@@ -11,8 +13,8 @@ import {
 import { PhaseBadge } from '../components/PhaseBadge'
 import { WorkTimer } from '../components/WorkTimer'
 import { emitAck, socket } from '../socket'
-import { ShortsRuntime } from '../runtime/ShortsRuntime'
-import { MerchMockup } from '../workspaces/MarketingWorkspace'
+import { ClipsRuntime } from '../runtime/ClipsRuntime'
+import { MerchMockup, PosterView } from '../workspaces/MarketingWorkspace'
 
 type Props = {
   state: ClientGameState
@@ -41,9 +43,15 @@ export function AdminScreen({ state, onError }: Props) {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan/70">Admin</p>
-          <h1 className="mt-1 font-display text-4xl">SHORTS</h1>
+          <h1 className="mt-1 font-display text-4xl">{PRODUCT_NAME}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <a
+            href="/qr"
+            className="rounded-2xl border border-line px-4 py-3 text-sm text-white/70"
+          >
+            QR
+          </a>
           <PhaseBadge phase={state.phase} />
           {state.phase === 'LOBBY' && (
             <>
@@ -260,7 +268,7 @@ function AdminWorkHud({ state }: { state: ClientGameState }) {
           size="admin"
         />
         <p className="mt-6 font-display text-5xl tracking-[0.12em]">WORK</p>
-        <p className="mt-2 text-xl text-white/60">Четыре команды собирают SHORTS</p>
+        <p className="mt-2 text-xl text-white/60">Четыре команды собирают {PRODUCT_NAME}</p>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
         {DEPARTMENTS.map((dept) => {
@@ -322,16 +330,17 @@ function ReleaseDashboard({
   return (
     <div className="mt-8">
       <div className="rounded-3xl border border-line bg-panel px-6 py-8 text-center">
-        <p className="text-sm uppercase tracking-[0.35em] text-cyan/70">🚀 SHORTS — RELEASE</p>
+        <p className="text-sm uppercase tracking-[0.35em] text-cyan/70">🚀 {PRODUCT_NAME} — RELEASE</p>
         <h2 className="mt-3 font-display text-5xl">
           {state.release?.launchedAt ? 'LIVE APPLICATION' : 'Готово к запуску'}
         </h2>
         <div className="mt-8 flex flex-col items-center">
-          <ShortsRuntime
+          <ClipsRuntime
             project={snapshot}
             stateId={state.release?.runtimeStateId ?? snapshot.logic.initialStateId}
             interactive={interactive}
             onAction={(eventName) => onDispatch(eventName)}
+            flags={state.release?.runtimeFlags}
             scale={0.78}
           />
           {interactive && (
@@ -387,35 +396,37 @@ function ReleaseDashboard({
           <p className="mt-3 font-display text-3xl text-gold">{snapshot.marketing.slogan}</p>
         )}
         {snapshot.marketing.videos.map((video) => (
-          <video key={video.id} src={video.url} controls className="mt-4 w-full max-w-xl rounded-2xl" />
-        ))}
-        {snapshot.marketing.posters.map((poster) => (
-          <div
-            key={poster.id}
-            className="relative mt-4 h-48 max-w-sm overflow-hidden rounded-3xl"
-            style={{ background: poster.background }}
-          >
-            {poster.layers.map((layer) => (
-              <div
-                key={layer.id}
-                className="absolute font-display"
-                style={{ left: layer.x, top: layer.y, fontSize: layer.fontSize, color: layer.color }}
-              >
-                {layer.text}
-              </div>
-            ))}
+          <div key={video.id} className="mt-4 max-w-xl">
+            {video.title && <p className="mb-2 font-display text-xl">{video.title}</p>}
+            {video.url && <video src={video.url} controls className="w-full rounded-2xl" />}
+            {video.hook && <p className="mt-2 text-sm text-white/50">{video.hook}</p>}
           </div>
         ))}
         <div className="mt-4 flex flex-wrap gap-4">
-          {snapshot.marketing.merch.map((item) => (
-            <MerchMockup key={item.id} kind={item.kind} text={item.text} color={item.color} />
+          {snapshot.marketing.posters.map((poster) => (
+            <div key={poster.id}>
+              <PosterView poster={poster} scale={0.42} className="rounded-3xl" />
+              {poster.title && <p className="mt-2 text-sm text-white/50">{poster.title}</p>}
+            </div>
           ))}
         </div>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 flex flex-wrap gap-4">
+          {snapshot.marketing.merch.map((item) => (
+            <div key={item.id} className="w-28 text-center">
+              <MerchMockup item={item} size="sm" />
+              <p className="mt-1 text-xs text-white/50">{item.name || MERCH_LABELS[item.kind]}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
           {snapshot.marketing.ideas.map((idea) => (
-            <p key={idea.id} className="text-white/70">
+            <span
+              key={idea.id}
+              className="rounded-2xl px-3 py-2 font-display text-sm font-bold"
+              style={{ background: idea.color ?? '#ffd166', color: '#16120a' }}
+            >
               {idea.text}
-            </p>
+            </span>
           ))}
         </div>
       </section>

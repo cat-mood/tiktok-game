@@ -1,4 +1,4 @@
-const STORAGE_PREFIX = 'shorts.onboarding.'
+const STORAGE_PREFIX = 'brainrot.onboarding.'
 
 export function hasSeenOnboarding(key: string): boolean {
   try {

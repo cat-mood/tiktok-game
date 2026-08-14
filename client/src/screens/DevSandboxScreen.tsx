@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   CLIENT_EVENTS,
   DEPARTMENTS,
+  PRODUCT_NAME,
   type ClientGameState,
   type DepartmentId,
 } from '@brainrot/shared'
@@ -55,10 +56,10 @@ export function DevSandboxScreen({ enabled, state, onError }: Props) {
   }
 
   return (
-    <div className="mx-auto min-h-dvh max-w-xl px-5 py-6">
+    <div className="mx-auto min-h-dvh w-full max-w-xl overflow-x-hidden px-5 py-6">
       <Onboarding id="sandbox" steps={SANDBOX_STEPS} onDone={() => setIntroDone(true)} />
       <p className="text-xs uppercase tracking-[0.35em] text-gold/70">Dev sandbox</p>
-      <h1 className="mt-2 font-display text-4xl">SHORTS workspace</h1>
+      <h1 className="mt-2 font-display text-4xl">{PRODUCT_NAME} workspace</h1>
       {frozen && (
         <p className="mt-4 rounded-2xl bg-gold/15 px-4 py-3 text-gold">
           Сессия уже в {state.phase}. Редактирование закрыто — в админке нажми «Новая игра», затем вернись сюда.
@@ -97,7 +98,7 @@ export function DevSandboxScreen({ enabled, state, onError }: Props) {
 
 const SANDBOX_STEPS = [
   {
-    title: 'Это песочница SHORTS',
+    title: `Это песочница ${PRODUCT_NAME}`,
     body: 'Сейчас ты Design. Сверху экраны: Клип, Создание видео, Чаты, Сообщение. Рисуй каждый. Свои стейты создавать не нужно.',
   },
   {

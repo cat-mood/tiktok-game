@@ -4,10 +4,14 @@ import { PlayerGameScreen } from './screens/PlayerGameScreen'
 import { AdminLogin } from './screens/AdminLogin'
 import { AdminScreen, useAdminSession } from './screens/AdminScreen'
 import { DevSandboxScreen } from './screens/DevSandboxScreen'
+import { QrScreen } from './screens/QrScreen'
 import { useGame } from './hooks/useGame'
 
 export function App() {
   const path = window.location.pathname
+  if (path.startsWith('/qr')) {
+    return <QrScreen />
+  }
   if (path.startsWith('/admin')) {
     return <AdminApp />
   }

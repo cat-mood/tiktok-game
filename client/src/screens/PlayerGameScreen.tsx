@@ -1,4 +1,5 @@
 import {
+  PRODUCT_NAME,
   projectStats,
   type ClientGameState,
   type DepartmentId,
@@ -11,7 +12,7 @@ import { DesignWorkspace } from '../workspaces/DesignWorkspace'
 import { DevelopmentWorkspace } from '../workspaces/DevelopmentWorkspace'
 import { QaWorkspace } from '../workspaces/QaWorkspace'
 import { MarketingWorkspace } from '../workspaces/MarketingWorkspace'
-import { ShortsRuntime } from '../runtime/ShortsRuntime'
+import { ClipsRuntime } from '../runtime/ClipsRuntime'
 
 type Props = {
   me: Player
@@ -36,7 +37,7 @@ function FinishedScreen() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center px-5 text-center">
       <div className="rise text-7xl">🚀</div>
-      <h1 className="mt-6 font-display text-5xl leading-none">SHORTS ЗАПУЩЕН</h1>
+      <h1 className="mt-6 font-display text-5xl leading-none">{PRODUCT_NAME} запущен</h1>
     </div>
   )
 }
@@ -46,7 +47,7 @@ function PlayerWork({ me, state, onError }: Props) {
   const teammates = state.players.filter((player) => player.departmentId === me.departmentId)
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 py-6">
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col overflow-x-hidden px-5 py-6">
       <WorkTimer
         phase={state.phase}
         phaseEndsAt={state.phaseEndsAt}
@@ -59,7 +60,7 @@ function PlayerWork({ me, state, onError }: Props) {
       <div className="mt-4">
         <PlayerList players={teammates} />
       </div>
-      <div className="mt-6">
+      <div className="mt-6 min-w-0">
         <DepartmentWorkspace departmentId={me.departmentId} me={me} state={state} onError={onError} />
       </div>
     </div>
@@ -76,14 +77,14 @@ function PlayerRelease({ me, state }: { me: Player; state: ClientGameState }) {
       <p className="text-xs uppercase tracking-[0.35em] text-cyan/70">
         {launched ? 'LIVE' : 'RELEASE PREPARATION'}
       </p>
-      <h1 className="mt-3 text-center font-display text-4xl">SHORTS</h1>
+      <h1 className="mt-3 text-center font-display text-4xl">{PRODUCT_NAME}</h1>
       {!launched && (
         <p className="pulse-soft mt-6 text-center text-xl text-gold">Ждём кнопку RELEASE у ведущего</p>
       )}
       {launched && (
         <>
           <div className="mt-6">
-            <ShortsRuntime
+            <ClipsRuntime
               project={snapshot}
               stateId={state.release?.runtimeStateId ?? null}
               scale={0.62}

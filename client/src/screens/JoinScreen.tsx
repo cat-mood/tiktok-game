@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   CLIENT_EVENTS,
   DEPARTMENTS,
+  PRODUCT_NAME,
   type ClientGameState,
   type DepartmentId,
   type Player,
@@ -71,7 +72,7 @@ export function JoinScreen({ state, onJoined, onError }: Props) {
     <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 py-8">
       <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan/70">IT Challenge</p>
       <h1 className="mt-3 font-display text-5xl leading-none tracking-tight sm:text-6xl">
-        SHORTS
+        {PRODUCT_NAME}
       </h1>
       <p className="mt-4 text-lg text-white/60">Четыре команды вместе собирают приложение коротких видео.</p>
 
@@ -130,11 +131,16 @@ export function JoinScreen({ state, onJoined, onError }: Props) {
         </button>
       )}
 
-      {state.devTools && (
-        <a href="/dev" className="mt-8 self-center text-sm text-gold/70">
-          Песочница workspace
+      <div className="mt-8 flex flex-col items-center gap-3 self-center">
+        <a href="/qr" className="text-sm text-cyan/70">
+          QR-коды для подключения
         </a>
-      )}
+        {state.devTools && (
+          <a href="/dev" className="text-sm text-gold/70">
+            Песочница workspace
+          </a>
+        )}
+      </div>
     </div>
   )
 }

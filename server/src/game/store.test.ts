@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultFlags, INITIAL_STATE_ID, PRESET_STATES, type LogicTransition, type TestCase } from '@brainrot/shared'
+import { defaultFlags, INITIAL_STATE_ID, PRESET_STATES, PRODUCT_NAME, type LogicTransition, type TestCase } from '@brainrot/shared'
 import { applyAction, runTest } from './interpreter.js'
 import { GameError, GameStore } from './store.js'
 
@@ -20,7 +20,7 @@ function defaultStateId(store: GameStore) {
   return store.getState().project.logic.initialStateId ?? INITIAL_STATE_ID
 }
 
-const LIKED_ID = 'video-liked'
+const COMMENTS_ID = 'comments'
 
 describe('GameStore lobby', () => {
   it('joins a player into a department', () => {
@@ -94,7 +94,7 @@ describe('GameStore lobby', () => {
     assert.equal(state.phase, 'WORK')
     assert.equal(state.workDurationMs, 10 * 60 * 1000)
     assert.ok(state.phaseEndsAt)
-    assert.equal(state.project.name, 'SHORTS')
+    assert.equal(state.project.name, PRODUCT_NAME)
     assert.equal(state.project.states[0].name, 'Клип')
     assert.equal(state.project.states.length, PRESET_STATES.length)
   })
@@ -217,7 +217,6 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     store.upsertComponent('design', fromId, {
       id: 'like',
       type: 'LIKE',
@@ -239,7 +238,7 @@ describe('GameStore project and release', () => {
     const project = store.getState().project
     assert.equal(project.design.layouts[0].components[0].type, 'LIKE')
     assert.equal(project.logic.transitions[0].toStateId, fromId)
-    assert.notEqual(project.logic.transitions[0].toStateId, liked.id)
+    assert.notEqual(project.logic.transitions[0].toStateId, COMMENTS_ID)
   })
 
   it('runs a QA test against the real logic and can fail', () => {
@@ -247,28 +246,27 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
-      event: 'CLICK_LIKE',
+      event: 'CLICK_COMMENT',
       toStateId: fromId,
       elseStateId: null,
       condition: null,
     })
     const test: TestCase = {
       id: 'test1',
-      title: 'Лайк',
+      title: 'Коммент',
       startStateId: fromId,
-      steps: [{ event: 'CLICK_LIKE' }],
-      expectedStateId: liked.id,
+      steps: [{ event: 'CLICK_COMMENT' }],
+      expectedStateId: COMMENTS_ID,
       lastResult: null,
     }
     store.upsertTest('qa', test)
     const result = store.runQaTest('qa', 'test1')
     assert.equal(result.passed, false)
     assert.equal(result.actualStateId, fromId)
-    assert.equal(result.expectedStateId, liked.id)
+    assert.equal(result.expectedStateId, COMMENTS_ID)
   })
 
   it('freezes the project on endWork and launches a runtime snapshot', () => {
@@ -276,12 +274,11 @@ describe('GameStore project and release', () => {
     seedFourLeads(store)
     store.startGame()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
-      event: 'CLICK_LIKE',
-      toStateId: liked.id,
+      event: 'CLICK_COMMENT',
+      toStateId: COMMENTS_ID,
       elseStateId: null,
       condition: null,
     })
@@ -298,8 +295,8 @@ describe('GameStore project and release', () => {
     const live = store.getState().release!
     assert.ok(live.launchedAt)
     assert.equal(live.runtimeStateId, fromId)
-    store.dispatchRuntime('CLICK_LIKE')
-    assert.equal(store.getState().release?.runtimeStateId, liked.id)
+    store.dispatchRuntime('CLICK_COMMENT')
+    assert.equal(store.getState().release?.runtimeStateId, COMMENTS_ID)
   })
 
   it('keeps a wrong transition in the released runtime', () => {
@@ -374,7 +371,56 @@ describe('GameStore project and release', () => {
     assert.equal(project.logic.initialStateId, INITIAL_STATE_ID)
     const layout = project.design.layouts.find((item) => item.stateId === INITIAL_STATE_ID)
     assert.equal(layout?.components[0]?.type, 'LIKE')
-    assert.ok(project.states.some((item) => item.id === LIKED_ID))
+    assert.ok(project.states.some((item) => item.id === INITIAL_STATE_ID))
+    assert.equal(project.states.some((item) => item.id === 'video-liked'), false)
+  })
+
+  it('maps a legacy liked clip onto the single video screen', () => {
+    const store = new GameStore()
+    const snapshot = store.getState()
+    const restored = GameStore.fromSnapshot({
+      ...snapshot,
+      project: {
+        ...snapshot.project,
+        states: [
+          { id: 'video', name: 'Клип', screenKey: 'VIDEO', flags: defaultFlags() },
+          {
+            id: 'video-liked',
+            name: 'Клип с лайком',
+            screenKey: 'VIDEO',
+            flags: { ...defaultFlags(), 'video.isLiked': true },
+          },
+        ],
+        design: {
+          screens: ['VIDEO'],
+          layouts: [
+            { stateId: 'video', components: [] },
+            {
+              stateId: 'video-liked',
+              components: [{ id: 'like', type: 'LIKE', x: 1, y: 1, w: 48, h: 48, props: { active: true } }],
+            },
+          ],
+        },
+        logic: {
+          initialStateId: 'video',
+          transitions: [
+            {
+              id: 't1',
+              fromStateId: 'video',
+              event: 'CLICK_LIKE',
+              toStateId: 'video-liked',
+              elseStateId: null,
+              condition: null,
+            },
+          ],
+        },
+      },
+    })
+    const project = restored.getState().project
+    assert.equal(project.states.some((item) => item.id === 'video-liked'), false)
+    assert.equal(project.logic.transitions[0].toStateId, INITIAL_STATE_ID)
+    const layout = project.design.layouts.find((item) => item.stateId === INITIAL_STATE_ID)
+    assert.equal(layout?.components[0]?.type, 'LIKE')
   })
 
   it('normalizes a legacy PLANNING snapshot into a lobby', () => {
@@ -393,66 +439,58 @@ describe('interpreter', () => {
   it('applies a matching transition and stays put when none exists', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
-      event: 'CLICK_LIKE',
-      toStateId: liked.id,
+      event: 'CLICK_COMMENT',
+      toStateId: COMMENTS_ID,
       elseStateId: null,
       condition: null,
     })
     const project = store.getState().project
-    assert.equal(applyAction(project, fromId, 'CLICK_LIKE').stateId, liked.id)
-    assert.equal(applyAction(project, fromId, 'CLICK_COMMENT').stateId, fromId)
+    assert.equal(applyAction(project, fromId, 'CLICK_COMMENT').stateId, COMMENTS_ID)
+    assert.equal(applyAction(project, fromId, 'CLICK_SHARE').stateId, fromId)
   })
 
-  it('does not invent a correct LIKE transition', () => {
+  it('toggles like on the same clip screen', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
-    store.upsertTransition('development', {
-      id: 't1',
-      fromStateId: fromId,
-      event: 'CLICK_LIKE',
-      toStateId: fromId,
-      elseStateId: null,
-      condition: null,
-    })
-    const result = applyAction(store.getState().project, fromId, 'CLICK_LIKE')
-    assert.equal(result.stateId, fromId)
-    assert.notEqual(result.stateId, liked.id)
+    const first = applyAction(store.getState().project, fromId, 'CLICK_LIKE')
+    assert.equal(first.stateId, fromId)
+    assert.equal(first.flags['video.isLiked'], true)
+    const second = applyAction(store.getState().project, fromId, 'CLICK_LIKE', first.flags)
+    assert.equal(second.stateId, fromId)
+    assert.equal(second.flags['video.isLiked'], false)
   })
 
   it('evaluates a condition without writing code', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     store.upsertTransition('development', {
       id: 't1',
       fromStateId: fromId,
-      event: 'CLICK_LIKE',
-      toStateId: liked.id,
+      event: 'CLICK_COMMENT',
+      toStateId: COMMENTS_ID,
       elseStateId: fromId,
-      condition: { property: 'video.isLiked', operator: 'eq', value: false },
+      condition: { property: 'video.isLiked', operator: 'eq', value: true },
     })
     const project = store.getState().project
-    const first = applyAction(project, fromId, 'CLICK_LIKE', defaultFlags())
-    assert.equal(first.stateId, liked.id)
-    const second = applyAction(project, fromId, 'CLICK_LIKE', first.flags)
-    assert.equal(second.stateId, fromId)
+    const first = applyAction(project, fromId, 'CLICK_COMMENT', defaultFlags())
+    assert.equal(first.stateId, fromId)
+    const liked = { ...defaultFlags(), 'video.isLiked': true }
+    const second = applyAction(project, fromId, 'CLICK_COMMENT', liked)
+    assert.equal(second.stateId, COMMENTS_ID)
   })
 
   it('marks a QA test as failed when actual state differs', () => {
     const store = new GameStore()
     const fromId = defaultStateId(store)
-    const liked = { id: LIKED_ID }
     const test: TestCase = {
       id: 't',
-      title: 'like',
+      title: 'comment',
       startStateId: fromId,
-      steps: [{ event: 'CLICK_LIKE' }],
-      expectedStateId: liked.id,
+      steps: [{ event: 'CLICK_COMMENT' }],
+      expectedStateId: COMMENTS_ID,
       lastResult: null,
     }
     const result = runTest(store.getState().project, test, 'now')

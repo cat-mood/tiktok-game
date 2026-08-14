@@ -8,6 +8,7 @@ import { Server } from 'socket.io'
 import { io as ioc, type Socket as ClientSocket } from 'socket.io-client'
 import {
   CLIENT_EVENTS,
+  PRODUCT_NAME,
   SERVER_EVENTS,
   type Ack,
   type ClientGameState,
@@ -205,7 +206,7 @@ describe('socket lobby flow', () => {
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminStartGame)).ok, true)
     const running = await alex.state.wait((s) => s.phase === 'WORK')
     assert.equal(running.phase, 'WORK')
-    assert.equal(running.project.name, 'SHORTS')
+    assert.equal(running.project.name, PRODUCT_NAME)
     assert.equal(
       (
         await emitAck(alex.client, CLIENT_EVENTS.playerChangeDepartment, {
@@ -353,7 +354,7 @@ describe('socket project collaboration', () => {
     const dev = work.players.find((p) => p.departmentId === 'development')!
     const qa = work.players.find((p) => p.departmentId === 'qa')!
     const fromId = work.project.states[0].id
-    const likedId = 'video-liked'
+    const commentsId = 'comments'
 
     const designSock = await connect()
     assert.equal(
@@ -399,8 +400,8 @@ describe('socket project collaboration', () => {
           transition: {
             id: 't1',
             fromStateId: fromId,
-            event: 'CLICK_LIKE',
-            toStateId: likedId,
+            event: 'CLICK_COMMENT',
+            toStateId: commentsId,
             elseStateId: null,
             condition: null,
           },
@@ -414,7 +415,7 @@ describe('socket project collaboration', () => {
         id: 't2',
         fromStateId: fromId,
         event: 'CLICK_COMMENT',
-        toStateId: likedId,
+        toStateId: commentsId,
         elseStateId: null,
         condition: null,
       },
@@ -436,10 +437,10 @@ describe('socket project collaboration', () => {
         await emitAck(qaSock.client, CLIENT_EVENTS.qaUpsertTest, {
           test: {
             id: 'test1',
-            title: 'Лайк',
+            title: 'Коммент',
             startStateId: fromId,
-            steps: [{ event: 'CLICK_LIKE' }],
-            expectedStateId: likedId,
+            steps: [{ event: 'CLICK_COMMENT' }],
+            expectedStateId: commentsId,
             lastResult: null,
           },
         })
@@ -454,8 +455,8 @@ describe('socket project collaboration', () => {
     assert.equal((await emitAck(admin.client, CLIENT_EVENTS.adminRelease)).ok, true)
     const live = await admin.state.wait((s) => Boolean(s.release?.launchedAt))
     assert.equal(live.release?.runtimeStateId, fromId)
-    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.runtimeDispatch, { event: 'CLICK_LIKE' })).ok, true)
-    const afterLike = await admin.state.wait((s) => s.release?.runtimeStateId === likedId)
-    assert.equal(afterLike.release?.runtimeStateId, likedId)
+    assert.equal((await emitAck(admin.client, CLIENT_EVENTS.runtimeDispatch, { event: 'CLICK_COMMENT' })).ok, true)
+    const afterComment = await admin.state.wait((s) => s.release?.runtimeStateId === commentsId)
+    assert.equal(afterComment.release?.runtimeStateId, commentsId)
   })
 })
