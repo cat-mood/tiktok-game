@@ -70,7 +70,7 @@ export type MerchKind = (typeof MERCH_KINDS)[number]
 export const MERCH_PATTERNS = ['none', 'stripes', 'dots', 'grid', 'chevrons', 'stars', 'waves', 'camo', 'hearts'] as const
 export type MerchPattern = (typeof MERCH_PATTERNS)[number]
 
-export const MERCH_PRINT_KINDS = ['text', 'draw', 'pattern', 'sticker'] as const
+export const MERCH_PRINT_KINDS = ['text', 'draw', 'pattern', 'sticker', 'image'] as const
 export type MerchPrintKind = (typeof MERCH_PRINT_KINDS)[number]
 
 export const IDEA_STICKER_COLORS = ['#ff2d6a', '#00f0ff', '#ffd166', '#ffffff', '#7cff6b', '#c084fc', '#ff8c1a', '#ff6b9d']
@@ -233,6 +233,7 @@ export type MerchPrintLayer = {
   id: string
   kind: MerchPrintKind
   text?: string
+  src?: string
   path?: string
   pattern?: MerchPattern
   x: number
@@ -578,59 +579,333 @@ export const PRESET_STATES: ReadonlyArray<{
     id: 'video',
     name: 'Клип',
     screenKey: 'VIDEO',
-    hint: 'Обычный ролик. Лайк ставится на этом же экране.',
+    hint: 'Вертикальный ролик: лайк, комменты, репост и свайп.',
     flags: defaultFlags(),
   },
   {
     id: 'comments',
     name: 'Комменты',
     screenKey: 'COMMENTS',
-    hint: 'Экран комментариев. Открывается по иконке 💬',
+    hint: 'Шторка с комментариями поверх клипа.',
     flags: { ...defaultFlags(), 'comments.isOpen': true },
   },
   {
     id: 'share',
     name: 'Репост',
     screenKey: 'SHARE',
-    hint: 'Экран «поделиться». Открывается по иконке 📤',
+    hint: 'Куда отправить ролик: в чат, ссылкой или закрыть.',
     flags: { ...defaultFlags(), 'share.isOpen': true },
   },
   {
     id: 'feed',
     name: 'Лента',
     screenKey: 'FEED',
-    hint: 'Лента роликов. Сюда свайпают из клипа.',
+    hint: 'Стопка роликов. Свайп — следующий, тап — открыть.',
     flags: defaultFlags(),
   },
   {
     id: 'profile',
     name: 'Профиль',
     screenKey: 'PROFILE',
-    hint: 'Страница автора.',
+    hint: 'Страница автора: аватар, подписка и сетка клипов.',
     flags: defaultFlags(),
   },
   {
     id: 'create',
     name: 'Создание видео',
     screenKey: 'CREATE',
-    hint: 'Камера и кнопка «снять». Отсюда публикуют новый клип.',
+    hint: 'Камера: снять ролик и опубликовать.',
     flags: defaultFlags(),
   },
   {
     id: 'inbox',
     name: 'Чаты',
     screenKey: 'INBOX',
-    hint: 'Список переписок. Тап по чату открывает набор сообщения.',
+    hint: 'Список переписок. Тап по чату открывает сообщения.',
     flags: defaultFlags(),
   },
   {
     id: 'compose',
     name: 'Сообщение',
     screenKey: 'COMPOSE',
-    hint: 'Переписка: история сообщений и поле ввода.',
+    hint: 'Переписка: пузыри, поле ввода и кнопка назад.',
     flags: defaultFlags(),
   },
 ]
+
+export type ScreenLogicKind = 'goto' | 'stay' | 'toggle'
+
+export type ScreenLogicAction = {
+  event: LogicEvent
+  emoji: string
+  title: string
+  hint: string
+  suggestedToId: string | null
+  kind: ScreenLogicKind
+  lock?: {
+    property: ConditionProperty
+    label: string
+  }
+}
+
+export type ScreenLogic = {
+  emoji: string
+  accent: string
+  tagline: string
+  actions: readonly ScreenLogicAction[]
+}
+
+export const SCREEN_LOGIC: Record<string, ScreenLogic> = {
+  video: {
+    emoji: '🎬',
+    accent: '#ff2d6a',
+    tagline: 'Сердце, комменты, репост и свайп',
+    actions: [
+      {
+        event: 'CLICK_LIKE',
+        emoji: '❤️',
+        title: 'Лайк',
+        hint: 'Сердечко загорается на этом же экране — никуда не уходим.',
+        suggestedToId: 'video',
+        kind: 'toggle',
+      },
+      {
+        event: 'CLICK_COMMENT',
+        emoji: '💬',
+        title: 'Комменты',
+        hint: 'Иконка комментариев справа.',
+        suggestedToId: 'comments',
+        kind: 'goto',
+        lock: { property: 'video.isLiked', label: 'только после лайка' },
+      },
+      {
+        event: 'CLICK_SHARE',
+        emoji: '📤',
+        title: 'Репост',
+        hint: 'Иконка «поделиться».',
+        suggestedToId: 'share',
+        kind: 'goto',
+      },
+      {
+        event: 'SWIPE',
+        emoji: '👆',
+        title: 'Свайп вверх',
+        hint: 'Следующий ролик в ленте.',
+        suggestedToId: 'feed',
+        kind: 'goto',
+      },
+      {
+        event: 'CLICK',
+        emoji: '🙂',
+        title: 'Автор',
+        hint: 'Тап по аватарке открывает профиль.',
+        suggestedToId: 'profile',
+        kind: 'goto',
+      },
+    ],
+  },
+  comments: {
+    emoji: '💬',
+    accent: '#ffffff',
+    tagline: 'Шторка: закрыть или отправить',
+    actions: [
+      {
+        event: 'CLOSE',
+        emoji: '✕',
+        title: 'Закрыть',
+        hint: 'Крестик или свайп вниз — шторка уезжает.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+      {
+        event: 'SUBMIT',
+        emoji: '➤',
+        title: 'Отправить',
+        hint: 'Комментарий улетает, экран можно оставить.',
+        suggestedToId: 'comments',
+        kind: 'stay',
+      },
+      {
+        event: 'BACK',
+        emoji: '←',
+        title: 'Назад',
+        hint: 'Вернуться к клипу.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+    ],
+  },
+  share: {
+    emoji: '📤',
+    accent: '#00f0ff',
+    tagline: 'Куда отправить ролик',
+    actions: [
+      {
+        event: 'CLOSE',
+        emoji: '✕',
+        title: 'Закрыть',
+        hint: 'Свернуть шаринг и вернуться.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+      {
+        event: 'CLICK',
+        emoji: '💬',
+        title: 'В чаты',
+        hint: 'Отправить ролик другу в переписку.',
+        suggestedToId: 'inbox',
+        kind: 'goto',
+      },
+      {
+        event: 'CLICK_SHARE',
+        emoji: '🔗',
+        title: 'Скопировать',
+        hint: 'Ссылка копируется, остаёмся здесь.',
+        suggestedToId: 'share',
+        kind: 'stay',
+      },
+    ],
+  },
+  feed: {
+    emoji: '📱',
+    accent: '#ffd166',
+    tagline: 'Стопка роликов',
+    actions: [
+      {
+        event: 'CLICK',
+        emoji: '▶',
+        title: 'Открыть клип',
+        hint: 'Тап по карточке — полноэкранный ролик.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+      {
+        event: 'SWIPE',
+        emoji: '👆',
+        title: 'Следующий',
+        hint: 'Свайп вверх. Лента одна — можно остаться.',
+        suggestedToId: 'feed',
+        kind: 'stay',
+      },
+      {
+        event: 'CLICK_COMMENT',
+        emoji: '🙂',
+        title: 'Профиль автора',
+        hint: 'С карточки в ленте тоже можно зайти к автору.',
+        suggestedToId: 'profile',
+        kind: 'goto',
+      },
+    ],
+  },
+  profile: {
+    emoji: '👤',
+    accent: '#c084fc',
+    tagline: 'Аватар, подписка, сетка клипов',
+    actions: [
+      {
+        event: 'CLICK',
+        emoji: '▶',
+        title: 'Клип автора',
+        hint: 'Тап по превью в сетке.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+      {
+        event: 'BACK',
+        emoji: '←',
+        title: 'Назад',
+        hint: 'Вернуться к ролику.',
+        suggestedToId: 'video',
+        kind: 'goto',
+      },
+      {
+        event: 'SUBMIT',
+        emoji: '➕',
+        title: 'Подписка',
+        hint: 'Кнопка «подписаться» остаётся на профиле.',
+        suggestedToId: 'profile',
+        kind: 'stay',
+      },
+    ],
+  },
+  create: {
+    emoji: '📷',
+    accent: '#ff2d6a',
+    tagline: 'Камера: снять и выложить',
+    actions: [
+      {
+        event: 'CLICK',
+        emoji: '⏺',
+        title: 'Опубликовать',
+        hint: 'После записи ролик улетает в ленту или в клип.',
+        suggestedToId: 'feed',
+        kind: 'goto',
+      },
+      {
+        event: 'BACK',
+        emoji: '←',
+        title: 'Отмена',
+        hint: 'Не снимаем — назад в ленту.',
+        suggestedToId: 'feed',
+        kind: 'goto',
+      },
+    ],
+  },
+  inbox: {
+    emoji: '💌',
+    accent: '#7cff6b',
+    tagline: 'Список переписок',
+    actions: [
+      {
+        event: 'CLICK',
+        emoji: '💬',
+        title: 'Открыть чат',
+        hint: 'Тап по строке — переписка.',
+        suggestedToId: 'compose',
+        kind: 'goto',
+      },
+      {
+        event: 'SUBMIT',
+        emoji: '🔍',
+        title: 'Поиск',
+        hint: 'Ищем чат, список остаётся.',
+        suggestedToId: 'inbox',
+        kind: 'stay',
+      },
+    ],
+  },
+  compose: {
+    emoji: '✉️',
+    accent: '#00f0ff',
+    tagline: 'Пузыри и поле ввода',
+    actions: [
+      {
+        event: 'BACK',
+        emoji: '←',
+        title: 'К чатам',
+        hint: 'Стрелка назад в список.',
+        suggestedToId: 'inbox',
+        kind: 'goto',
+      },
+      {
+        event: 'SUBMIT',
+        emoji: '➤',
+        title: 'Отправить',
+        hint: 'Сообщение улетает, остаёмся в переписке.',
+        suggestedToId: 'compose',
+        kind: 'stay',
+      },
+    ],
+  },
+}
+
+export function screenLogic(stateId: string): ScreenLogic | null {
+  return SCREEN_LOGIC[stateId] ?? null
+}
+
+export function screenActions(stateId: string): readonly ScreenLogicAction[] {
+  return SCREEN_LOGIC[stateId]?.actions ?? []
+}
 
 export type QaMission = {
   id: string

@@ -151,6 +151,37 @@ function PrintLayerSvg({
       </g>
     )
   }
+  if (layer.kind === 'image') {
+    if (!layer.src) {
+      return null
+    }
+    const w = layer.w ?? 40
+    const h = layer.h ?? 40
+    return (
+      <g transform={`rotate(${layer.rotation ?? 0} ${layer.x} ${layer.y})`} opacity={opacity}>
+        {selected && (
+          <rect
+            x={layer.x - w / 2 - 1}
+            y={layer.y - h / 2 - 1}
+            width={w + 2}
+            height={h + 2}
+            fill="rgba(0,240,255,0.12)"
+            stroke="#00f0ff"
+            strokeWidth="1.2"
+            rx="2"
+          />
+        )}
+        <image
+          href={layer.src}
+          x={layer.x - w / 2}
+          y={layer.y - h / 2}
+          width={w}
+          height={h}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      </g>
+    )
+  }
   const size = layer.fontSize ?? 16
   const width = Math.max(22, (layer.text?.length ?? 1) * size * 0.62)
   const height = Math.max(18, size * 1.4)

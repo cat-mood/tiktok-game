@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultFlags, INITIAL_STATE_ID, PRESET_STATES, PRODUCT_NAME, type LogicTransition, type TestCase } from '@brainrot/shared'
+import {
+  defaultFlags,
+  INITIAL_STATE_ID,
+  MAX_WORK_MS,
+  MIN_WORK_MS,
+  PRESET_STATES,
+  PRODUCT_NAME,
+  screenLogic,
+  type LogicTransition,
+  type TestCase,
+} from '@brainrot/shared'
 import { applyAction, runTest } from './interpreter.js'
 import { GameError, GameStore } from './store.js'
 
@@ -97,6 +107,66 @@ describe('GameStore lobby', () => {
     assert.equal(state.project.name, PRODUCT_NAME)
     assert.equal(state.project.states[0].name, 'Клип')
     assert.equal(state.project.states.length, PRESET_STATES.length)
+  })
+
+  it('rejects work duration outside the allowed range', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    assert.throws(() => store.startGame(MIN_WORK_MS - 1), /Время игры/)
+    assert.throws(() => store.startGame(MAX_WORK_MS + 1), /Время игры/)
+  })
+
+  it('extends the WORK timer when admin adds time', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame(10 * 60 * 1000)
+    const before = Date.parse(store.getState().phaseEndsAt!)
+    store.addWorkTime(5 * 60 * 1000)
+    const after = Date.parse(store.getState().phaseEndsAt!)
+    assert.equal(after - before, 5 * 60 * 1000)
+    assert.equal(store.getState().workDurationMs, 15 * 60 * 1000)
+  })
+
+  it('does not add time outside WORK', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    assert.throws(() => store.addWorkTime(60_000), /нет активного этапа/)
+  })
+
+  it('resumes WORK after it ended and allows editing again', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame(10 * 60 * 1000)
+    store.setSlogan('marketing', 'go')
+    store.endWork()
+    assert.throws(() => store.setSlogan('marketing', 'again'), /закрыто/)
+    store.resumeWork(5 * 60 * 1000)
+    const state = store.getState()
+    assert.equal(state.phase, 'WORK')
+    assert.equal(state.release, null)
+    assert.equal(state.workDurationMs, 5 * 60 * 1000)
+    assert.ok(state.phaseEndsAt)
+    assert.equal(state.project.marketing.slogan, 'go')
+    store.setSlogan('marketing', 'again')
+    assert.equal(store.getState().project.marketing.slogan, 'again')
+  })
+
+  it('resumes WORK from FINISHED', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    store.endWork()
+    store.launchRelease()
+    store.finish()
+    store.resumeWork(10 * 60 * 1000)
+    assert.equal(store.getState().phase, 'WORK')
+    assert.equal(store.getState().release, null)
+  })
+
+  it('does not resume from lobby', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    assert.throws(() => store.resumeWork(), /возобновить/)
   })
 
   it('freezes roster after the game starts', () => {
@@ -241,6 +311,34 @@ describe('GameStore project and release', () => {
     assert.notEqual(project.logic.transitions[0].toStateId, COMMENTS_ID)
   })
 
+  it('lets marketing put an uploaded image on merch', () => {
+    const store = new GameStore()
+    seedFourLeads(store)
+    store.startGame()
+    store.upsertMerch('marketing', {
+      id: 'm1',
+      kind: 'tshirt',
+      name: 'Футболка',
+      text: PRODUCT_NAME,
+      color: '#e8e4dc',
+      layers: [
+        {
+          id: 'img1',
+          kind: 'image',
+          src: '/uploads/logo.png',
+          x: 50,
+          y: 40,
+          w: 36,
+          h: 36,
+        },
+      ],
+    })
+    const merch = store.getState().project.marketing.merch[0]
+    assert.equal(merch.layers?.[0]?.kind, 'image')
+    assert.equal(merch.layers?.[0]?.src, '/uploads/logo.png')
+    assert.equal(merch.layers?.[0]?.w, 36)
+  })
+
   it('runs a QA test against the real logic and can fail', () => {
     const store = new GameStore()
     seedFourLeads(store)
@@ -333,6 +431,18 @@ describe('GameStore project and release', () => {
     store.advancePhase()
     assert.equal(store.getState().phase, 'RELEASE')
     assert.ok(store.getState().release)
+  })
+
+  it('gives every preset screen its own gestures instead of a generic if-then', () => {
+    const seen = new Set<string>()
+    for (const state of PRESET_STATES) {
+      const logic = screenLogic(state.id)
+      assert.ok(logic, state.id)
+      assert.ok(logic.actions.length > 0, state.id)
+      const signature = logic.actions.map((item) => `${item.event}:${item.kind}:${item.title}`).join('|')
+      assert.equal(seen.has(signature), false, `duplicate gestures on ${state.id}`)
+      seen.add(signature)
+    }
   })
 
   it('seeds preset states with empty layouts for design', () => {

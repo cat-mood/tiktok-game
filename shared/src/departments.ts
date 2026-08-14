@@ -12,13 +12,13 @@ export const DEPARTMENTS: DepartmentInfo[] = [
     id: 'development',
     emoji: '👨‍💻',
     name: 'Development',
-    description: 'Собираем, как работает приложение',
+    description: 'Настраиваем, что происходит на каждом экране',
   },
   {
     id: 'design',
     emoji: '🎨',
     name: 'Design',
-    description: 'Собираем интерфейс и состояния',
+    description: 'Собираем интерфейс по экранам',
   },
   {
     id: 'marketing',

@@ -17,9 +17,9 @@ import {
 } from '@brainrot/shared'
 import { newId, patch } from '../../lib/patch'
 import { MerchMockup } from './MerchMockup'
-import { ColorField, Field, ItemRail, fieldClass } from './shared'
+import { ColorField, Field, ItemRail, fieldClass, uploadFile } from './shared'
 
-type Tool = 'select' | 'text' | 'brush' | 'pattern' | 'sticker' | 'erase'
+type Tool = 'select' | 'text' | 'image' | 'brush' | 'pattern' | 'sticker' | 'erase'
 
 type Props = {
   state: ClientGameState
@@ -30,6 +30,7 @@ type Props = {
 const TOOLS: Array<{ id: Tool; label: string }> = [
   { id: 'select', label: 'Выбор' },
   { id: 'text', label: 'Текст' },
+  { id: 'image', label: 'Фото' },
   { id: 'brush', label: 'Кисть' },
   { id: 'pattern', label: 'Узор' },
   { id: 'sticker', label: 'Стикер' },
@@ -50,6 +51,7 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
   const drawing = useRef<string | null>(null)
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null)
   const draftRef = useRef<MerchItem | null>(null)
+  const imageInput = useRef<HTMLInputElement>(null)
   draftRef.current = draft
 
   useEffect(() => {
@@ -149,10 +151,14 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
       }
       return
     }
-    if (hit && (tool === 'select' || tool === 'text' || tool === 'sticker')) {
+    if (hit && (tool === 'select' || tool === 'text' || tool === 'sticker' || tool === 'image')) {
       setLayerId(hit.id)
       setTool('select')
       drag.current = { id: hit.id, dx: x - hit.x, dy: y - hit.y }
+      return
+    }
+    if (tool === 'image') {
+      imageInput.current?.click()
       return
     }
     if (tool === 'text') {
@@ -252,7 +258,7 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
       <section className="rounded-3xl border border-line bg-panel p-4">
         <h2 className="font-display text-2xl">Макеты мерча</h2>
         <p className="mt-1 text-sm text-white/45">
-          Реальные изделия: пиши текст на ткани, рисуй кистью, клади узоры.
+          Реальные изделия: пиши текст, грузи свои картинки, рисуй кистью, клади узоры.
         </p>
         <div className="mt-4">
           <ItemRail
@@ -298,7 +304,7 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
                 onPrintPointerUp={onPrintUp}
               />
               <p className="mt-2 text-center text-xs text-white/40">
-                Потяни надпись в пунктирной зоне. «Текст» ставит новую, «Выбор» двигает.
+                Потяни слой в пунктирной зоне. «Фото» грузит картинку, «Текст» ставит надпись, «Выбор» двигает.
               </p>
             </div>
 
@@ -372,7 +378,12 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
                       key={item.id}
                       type="button"
                       disabled={readOnly}
-                      onClick={() => setTool(item.id)}
+                      onClick={() => {
+                        setTool(item.id)
+                        if (item.id === 'image') {
+                          imageInput.current?.click()
+                        }
+                      }}
                       className={[
                         'min-w-0 truncate rounded-2xl px-2 py-2 text-[11px] font-bold uppercase',
                         tool === item.id ? 'bg-cyan text-ink' : 'bg-white/10',
@@ -467,6 +478,32 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
                       />
                     </Field>
                   )}
+                  {selected.kind === 'image' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Ширина">
+                        <input
+                          type="range"
+                          min={12}
+                          max={90}
+                          value={selected.w ?? 40}
+                          disabled={readOnly}
+                          onChange={(event) => updateLayer({ ...selected, w: Number(event.target.value) })}
+                          className="w-full accent-cyan"
+                        />
+                      </Field>
+                      <Field label="Высота">
+                        <input
+                          type="range"
+                          min={12}
+                          max={90}
+                          value={selected.h ?? 40}
+                          disabled={readOnly}
+                          onChange={(event) => updateLayer({ ...selected, h: Number(event.target.value) })}
+                          className="w-full accent-cyan"
+                        />
+                      </Field>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Влево / вправо">
                       <input
@@ -511,6 +548,35 @@ export function MerchStudio({ state, onError, readOnly }: Props) {
               )}
             </div>
           </div>
+
+          <input
+            ref={imageInput}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file || !draft) {
+                return
+              }
+              try {
+                const src = await uploadFile(file)
+                addLayer({
+                  id: newId(),
+                  kind: 'image',
+                  src,
+                  x: 50,
+                  y: 48,
+                  w: 40,
+                  h: 40,
+                })
+                setTool('select')
+              } catch (error) {
+                onError(error instanceof Error ? error.message : 'Ошибка загрузки')
+              }
+            }}
+          />
         </section>
       )}
     </div>
@@ -531,6 +597,14 @@ function hitPrintLayer(layers: MerchPrintLayer[], x: number, y: number): MerchPr
       const w = layer.w ?? 100
       const h = layer.h ?? 100
       if (x >= layer.x && y >= layer.y && x <= layer.x + w && y <= layer.y + h) {
+        return layer
+      }
+      continue
+    }
+    if (layer.kind === 'image') {
+      const w = layer.w ?? 40
+      const h = layer.h ?? 40
+      if (x >= layer.x - w / 2 && x <= layer.x + w / 2 && y >= layer.y - h / 2 && y <= layer.y + h / 2) {
         return layer
       }
       continue

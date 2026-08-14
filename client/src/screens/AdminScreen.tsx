@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
+  ADD_TIME_OPTIONS_MS,
   CLIENT_EVENTS,
+  DEFAULT_WORK_MS,
   DEPARTMENTS,
+  MAX_WORK_MS,
   MERCH_LABELS,
+  MIN_WORK_MS,
   PRODUCT_NAME,
   WORK_DURATION_OPTIONS_MS,
   projectStats,
@@ -24,9 +28,17 @@ type Props = {
 export function AdminScreen({ state, onError }: Props) {
   const [confirmNew, setConfirmNew] = useState(false)
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [confirmResume, setConfirmResume] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [workDurationMs, setWorkDurationMs] = useState(state.workDurationMs || 30 * 60 * 1000)
+  const [workMinutes, setWorkMinutes] = useState(
+    Math.max(1, Math.round((state.workDurationMs || DEFAULT_WORK_MS) / 60_000)),
+  )
   const locked = state.phase !== 'LOBBY'
+  const workDurationMs = workMinutes * 60_000
+  const durationValid =
+    Number.isInteger(workMinutes) &&
+    workDurationMs >= MIN_WORK_MS &&
+    workDurationMs <= MAX_WORK_MS
 
   const run = async (event: string, payload?: unknown) => {
     setBusy(true)
@@ -55,36 +67,16 @@ export function AdminScreen({ state, onError }: Props) {
           <PhaseBadge phase={state.phase} />
           {state.phase === 'LOBBY' && (
             <>
-              <select
-                value={workDurationMs}
-                onChange={(event) => setWorkDurationMs(Number(event.target.value))}
-                className="rounded-2xl bg-ink px-3 py-3"
-              >
-                {WORK_DURATION_OPTIONS_MS.map((ms) => (
-                  <option key={ms} value={ms}>
-                    {ms / 60000} мин
-                  </option>
-                ))}
-              </select>
+              <DurationPicker minutes={workMinutes} onChange={setWorkMinutes} />
               <button
                 type="button"
-                disabled={busy || locked}
+                disabled={busy || locked || !durationValid}
                 onClick={() => void run(CLIENT_EVENTS.adminStartGame, { workDurationMs })}
                 className="rounded-2xl bg-cyan px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
               >
                 Начать работу
               </button>
             </>
-          )}
-          {state.phase === 'WORK' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setConfirmEnd(true)}
-              className="rounded-2xl bg-gold px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
-            >
-              END WORK
-            </button>
           )}
           {state.phase === 'RELEASE' && !state.release?.launchedAt && (
             <button
@@ -105,6 +97,19 @@ export function AdminScreen({ state, onError }: Props) {
             >
               Завершить
             </button>
+          )}
+          {(state.phase === 'RELEASE' || state.phase === 'FINISHED') && (
+            <>
+              <DurationPicker minutes={workMinutes} onChange={setWorkMinutes} />
+              <button
+                type="button"
+                disabled={busy || !durationValid}
+                onClick={() => setConfirmResume(true)}
+                className="rounded-2xl bg-cyan px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
+              >
+                Возобновить игру
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -153,20 +158,43 @@ export function AdminScreen({ state, onError }: Props) {
           onDispatch={(eventName) => void run(CLIENT_EVENTS.runtimeDispatch, { event: eventName })}
         />
       ) : (
-        <AdminWorkHud state={state} />
+        <AdminWorkHud
+          state={state}
+          busy={busy}
+          onAddTime={(extraMs) => void run(CLIENT_EVENTS.adminAddTime, { extraMs })}
+          onEndWork={() => setConfirmEnd(true)}
+        />
       )}
 
       {confirmEnd && (
         <ConfirmModal
-          title="Завершить работу?"
+          title="Остановить игру досрочно?"
           body="Редактирование закроется. Затем нажмите RELEASE, чтобы запустить приложение."
-          confirmLabel="END WORK"
+          confirmLabel="Остановить"
           confirmClass="bg-gold text-ink"
           onCancel={() => setConfirmEnd(false)}
           onConfirm={async () => {
             const ok = await run(CLIENT_EVENTS.adminEndWork)
             if (ok) {
               setConfirmEnd(false)
+            }
+          }}
+        />
+      )}
+
+      {confirmResume && (
+        <ConfirmModal
+          title="Возобновить игру?"
+          body={`Команды снова смогут редактировать. Таймер начнётся заново на ${
+            Number.isInteger(workMinutes) ? `${workMinutes} мин` : 'выбранное время'
+          }. Экран RELEASE закроется.`}
+          confirmLabel="Возобновить"
+          confirmClass="bg-cyan text-ink"
+          onCancel={() => setConfirmResume(false)}
+          onConfirm={async () => {
+            const ok = await run(CLIENT_EVENTS.adminResumeWork, { workDurationMs })
+            if (ok) {
+              setConfirmResume(false)
             }
           }}
         />
@@ -256,8 +284,23 @@ function LobbyRoster({
   )
 }
 
-function AdminWorkHud({ state }: { state: ClientGameState }) {
+function AdminWorkHud({
+  state,
+  busy,
+  onAddTime,
+  onEndWork,
+}: {
+  state: ClientGameState
+  busy: boolean
+  onAddTime: (extraMs: number) => void
+  onEndWork: () => void
+}) {
   const stats = projectStats(state.project)
+  const [extraMinutes, setExtraMinutes] = useState(5)
+  const extraMs = extraMinutes * 60_000
+  const extraValid =
+    Number.isInteger(extraMinutes) && extraMs >= MIN_WORK_MS && extraMs <= MAX_WORK_MS
+
   return (
     <div className="mt-8">
       <div className="rounded-3xl border border-line bg-panel px-6 py-8 text-center">
@@ -269,6 +312,51 @@ function AdminWorkHud({ state }: { state: ClientGameState }) {
         />
         <p className="mt-6 font-display text-5xl tracking-[0.12em]">WORK</p>
         <p className="mt-2 text-xl text-white/60">Четыре команды собирают {PRODUCT_NAME}</p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          {ADD_TIME_OPTIONS_MS.map((ms) => (
+            <button
+              key={ms}
+              type="button"
+              disabled={busy}
+              onClick={() => onAddTime(ms)}
+              className="rounded-2xl border border-cyan/40 bg-cyan/10 px-4 py-3 text-lg font-bold text-cyan disabled:opacity-40"
+            >
+              +{ms / 60_000} мин
+            </button>
+          ))}
+          <label className="flex items-center gap-2 rounded-2xl border border-line bg-ink px-3 py-2">
+            <input
+              type="number"
+              min={MIN_WORK_MS / 60_000}
+              max={MAX_WORK_MS / 60_000}
+              step={1}
+              value={Number.isFinite(extraMinutes) ? extraMinutes : ''}
+              onChange={(event) => {
+                const next = event.target.value
+                setExtraMinutes(next === '' ? Number.NaN : Number(next))
+              }}
+              className="w-16 bg-transparent text-center text-lg font-bold outline-none"
+              aria-label="Добавить минуты"
+            />
+            <span className="text-sm text-white/60">мин</span>
+          </label>
+          <button
+            type="button"
+            disabled={busy || !extraValid}
+            onClick={() => onAddTime(extraMs)}
+            className="rounded-2xl bg-cyan px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
+          >
+            Добавить время
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onEndWork}
+            className="rounded-2xl bg-gold px-5 py-3 text-lg font-bold text-ink disabled:opacity-40"
+          >
+            Остановить игру
+          </button>
+        </div>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
         {DEPARTMENTS.map((dept) => {
@@ -547,6 +635,50 @@ function AdminPlayerCard({
         </button>
       </div>
     </div>
+  )
+}
+
+function DurationPicker({
+  minutes,
+  onChange,
+}: {
+  minutes: number
+  onChange: (minutes: number) => void
+}) {
+  return (
+    <>
+      <label className="flex items-center gap-2 rounded-2xl border border-line bg-ink px-3 py-2">
+        <input
+          type="number"
+          min={MIN_WORK_MS / 60_000}
+          max={MAX_WORK_MS / 60_000}
+          step={1}
+          value={Number.isFinite(minutes) ? minutes : ''}
+          onChange={(event) => {
+            const next = event.target.value
+            onChange(next === '' ? Number.NaN : Number(next))
+          }}
+          className="w-16 bg-transparent text-center text-lg font-bold outline-none"
+          aria-label="Длительность игры в минутах"
+        />
+        <span className="text-sm text-white/60">мин</span>
+      </label>
+      <div className="flex flex-wrap gap-1">
+        {WORK_DURATION_OPTIONS_MS.map((ms) => (
+          <button
+            key={ms}
+            type="button"
+            onClick={() => onChange(ms / 60_000)}
+            className={[
+              'rounded-xl px-2.5 py-2 text-sm font-bold',
+              minutes === ms / 60_000 ? 'bg-cyan text-ink' : 'border border-white/15 text-white/70',
+            ].join(' ')}
+          >
+            {ms / 60_000}
+          </button>
+        ))}
+      </div>
+    </>
   )
 }
 

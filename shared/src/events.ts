@@ -47,7 +47,9 @@ export const CLIENT_EVENTS = {
   adminMovePlayer: 'admin:movePlayer',
   adminRemovePlayer: 'admin:removePlayer',
   adminStartGame: 'admin:startGame',
+  adminAddTime: 'admin:addTime',
   adminEndWork: 'admin:endWork',
+  adminResumeWork: 'admin:resumeWork',
   adminRelease: 'admin:release',
   adminFinish: 'admin:finish',
   adminNewGame: 'admin:newGame',
@@ -94,6 +96,14 @@ export type AdminSpawnPlayerPayload = {
 }
 
 export type AdminStartGamePayload = {
+  workDurationMs?: number
+}
+
+export type AdminAddTimePayload = {
+  extraMs: number
+}
+
+export type AdminResumeWorkPayload = {
   workDurationMs?: number
 }
 

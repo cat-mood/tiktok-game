@@ -4,9 +4,11 @@ import {
   SERVER_EVENTS,
   isDepartmentId,
   type Ack,
+  type AdminAddTimePayload,
   type AdminAuthPayload,
   type AdminMovePlayerPayload,
   type AdminPlayerPayload,
+  type AdminResumeWorkPayload,
   type AdminSpawnPlayerPayload,
   type AdminStartGamePayload,
   type BugIdPayload,
@@ -653,6 +655,20 @@ export function registerSocketHandlers(
       },
     )
 
+    socket.on(
+      CLIENT_EVENTS.adminAddTime,
+      async (payload: AdminAddTimePayload, ack?: (res: Ack) => void) => {
+        try {
+          requireAdmin(socket)
+          await runtime.mutate((store) => store.addWorkTime(payload?.extraMs))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
+
     socket.on(CLIENT_EVENTS.adminEndWork, async (_payload, ack?: (res: Ack) => void) => {
       try {
         requireAdmin(socket)
@@ -663,6 +679,20 @@ export function registerSocketHandlers(
         ack?.(fail(error))
       }
     })
+
+    socket.on(
+      CLIENT_EVENTS.adminResumeWork,
+      async (payload: AdminResumeWorkPayload, ack?: (res: Ack) => void) => {
+        try {
+          requireAdmin(socket)
+          await runtime.mutate((store) => store.resumeWork(payload?.workDurationMs))
+          broadcast()
+          ack?.(ok())
+        } catch (error) {
+          ack?.(fail(error))
+        }
+      },
+    )
 
     socket.on(CLIENT_EVENTS.adminRelease, async (_payload, ack?: (res: Ack) => void) => {
       try {

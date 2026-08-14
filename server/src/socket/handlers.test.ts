@@ -303,6 +303,83 @@ describe('socket spawn in dev', () => {
   })
 })
 
+describe('socket admin timer controls', () => {
+  let dataDir = ''
+  let url = ''
+  let io: Server
+  let httpServer: ReturnType<typeof createServer>
+  let runtime: GameRuntime
+  const clients: ClientSocket[] = []
+
+  before(async () => {
+    dataDir = await mkdtemp(path.join(os.tmpdir(), 'brainrot-timer-'))
+    runtime = await GameRuntime.create(dataDir, { devTools: true })
+    httpServer = createServer()
+    io = new Server(httpServer, { cors: { origin: true } })
+    registerSocketHandlers(io, runtime, ADMIN_CODE)
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+    const address = httpServer.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('No listen address')
+    }
+    url = `http://127.0.0.1:${address.port}`
+  })
+
+  after(async () => {
+    for (const client of clients) {
+      client.close()
+    }
+    io.close()
+    runtime.stop()
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    await runtime.flush()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  it('lets admin set duration, add time, stop work early, and resume', async () => {
+    const client = ioc(url, { transports: ['websocket'] })
+    const state = trackState(client)
+    clients.push(client)
+    await new Promise<void>((resolve) => client.on('connect', () => resolve()))
+
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminAuth, { code: ADMIN_CODE })).ok, true)
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminFillLobby)).ok, true)
+    await state.wait((s) => s.players.length === 4)
+
+    const workDurationMs = 10 * 60 * 1000
+    assert.equal(
+      (await emitAck(client, CLIENT_EVENTS.adminStartGame, { workDurationMs })).ok,
+      true,
+    )
+    const running = await state.wait((s) => s.phase === 'WORK')
+    assert.equal(running.workDurationMs, workDurationMs)
+    const beforeEndsAt = Date.parse(running.phaseEndsAt!)
+
+    assert.equal(
+      (await emitAck(client, CLIENT_EVENTS.adminAddTime, { extraMs: 5 * 60 * 1000 })).ok,
+      true,
+    )
+    const extended = await state.wait(
+      (s) => s.phase === 'WORK' && Date.parse(s.phaseEndsAt ?? '') > beforeEndsAt,
+    )
+    assert.equal(extended.workDurationMs, 15 * 60 * 1000)
+    assert.equal(Date.parse(extended.phaseEndsAt!) - beforeEndsAt, 5 * 60 * 1000)
+
+    assert.equal((await emitAck(client, CLIENT_EVENTS.adminEndWork)).ok, true)
+    const frozen = await state.wait((s) => s.phase === 'RELEASE')
+    assert.equal(frozen.phase, 'RELEASE')
+
+    assert.equal(
+      (await emitAck(client, CLIENT_EVENTS.adminResumeWork, { workDurationMs: 10 * 60 * 1000 })).ok,
+      true,
+    )
+    const resumed = await state.wait((s) => s.phase === 'WORK' && s.release === null)
+    assert.equal(resumed.phase, 'WORK')
+    assert.equal(resumed.workDurationMs, 10 * 60 * 1000)
+    assert.ok(resumed.phaseEndsAt)
+  })
+})
+
 describe('socket project collaboration', () => {
   let dataDir = ''
   let url = ''

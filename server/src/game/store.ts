@@ -4,6 +4,8 @@ import {
   CANVAS_WIDTH,
   DEFAULT_WORK_MS,
   DEPARTMENTS,
+  MAX_WORK_MS,
+  MIN_WORK_MS,
   PRODUCT_NAME,
   defaultFlags,
   ensurePresetProject,
@@ -253,13 +255,34 @@ export class GameStore {
         throw new GameError(`Нельзя начать игру: в ${dept.name} не назначен тимлид`)
       }
     }
-    const duration =
-      typeof workDurationMs === 'number' && workDurationMs > 0 ? workDurationMs : this.defaultWorkMs
+    const duration = this.resolveWorkDuration(workDurationMs)
     this.state.workDurationMs = duration
     const startAt = this.now()
     this.state.phase = 'WORK'
     this.state.phaseStartedAt = new Date(startAt).toISOString()
     this.state.phaseEndsAt = new Date(startAt + duration).toISOString()
+    this.touch()
+  }
+
+  addWorkTime(extraMs: number): void {
+    if (this.state.phase !== 'WORK') {
+      throw new GameError('Сейчас нет активного этапа работы')
+    }
+    if (!this.state.phaseEndsAt) {
+      throw new GameError('Таймер не запущен')
+    }
+    if (!Number.isFinite(extraMs) || extraMs <= 0) {
+      throw new GameError('Укажи, сколько времени добавить')
+    }
+    const now = this.now()
+    const endsAt = Date.parse(this.state.phaseEndsAt)
+    const remaining = Math.max(0, endsAt - now)
+    const added = Math.min(Math.round(extraMs), MAX_WORK_MS - remaining)
+    if (added <= 0) {
+      throw new GameError(`Нельзя добавить больше ${MAX_WORK_MS / 60000} минут`)
+    }
+    this.state.phaseEndsAt = new Date(endsAt + added).toISOString()
+    this.state.workDurationMs += added
     this.touch()
   }
 
@@ -315,6 +338,20 @@ export class GameStore {
     this.state.phase = 'FINISHED'
     this.state.phaseStartedAt = null
     this.state.phaseEndsAt = null
+    this.touch()
+  }
+
+  resumeWork(workDurationMs?: number): void {
+    if (this.state.phase !== 'RELEASE' && this.state.phase !== 'FINISHED') {
+      throw new GameError('Игру можно возобновить только после завершения работы')
+    }
+    const duration = this.resolveWorkDuration(workDurationMs)
+    const startAt = this.now()
+    this.state.phase = 'WORK'
+    this.state.workDurationMs = duration
+    this.state.phaseStartedAt = new Date(startAt).toISOString()
+    this.state.phaseEndsAt = new Date(startAt + duration).toISOString()
+    this.state.release = null
     this.touch()
   }
 
@@ -572,6 +609,17 @@ export class GameStore {
     this.touch()
   }
 
+  private resolveWorkDuration(workDurationMs?: number): number {
+    if (typeof workDurationMs !== 'number' || !Number.isFinite(workDurationMs) || workDurationMs <= 0) {
+      return this.defaultWorkMs
+    }
+    const duration = Math.round(workDurationMs)
+    if (duration < MIN_WORK_MS || duration > MAX_WORK_MS) {
+      throw new GameError(`Время игры: от ${MIN_WORK_MS / 60000} до ${MAX_WORK_MS / 60000} минут`)
+    }
+    return duration
+  }
+
   private freezeWork(at: number): void {
     this.state.phase = 'RELEASE'
     this.state.phaseStartedAt = new Date(at).toISOString()
@@ -792,6 +840,7 @@ function normalizeMerch(merch: MerchItem): MerchItem {
         id: layer.id || randomUUID(),
         kind: isMerchPrintKind(layer.kind) ? layer.kind : 'text',
         text: layer.text?.slice(0, 80),
+        src: layer.src?.slice(0, 500),
         path: layer.path?.slice(0, MAX_PATH),
         pattern: layer.pattern && isMerchPattern(layer.pattern) ? layer.pattern : undefined,
         x: clampCoord(layer.x, 0, 100),
